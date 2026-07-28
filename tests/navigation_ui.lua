@@ -137,6 +137,10 @@ local function testShouldersChangeCategories()
   assertEqual(fixture.ui.browserState.category, "item_unlocks", "right shoulder should advance the category")
   fixture.press(fixture.controller.LEFT_SHOULDER)
   assertEqual(fixture.ui.browserState.category, "boss_routes", "left shoulder should restore the category")
+  fixture.press(fixture.controller.LEFT_SHOULDER)
+  assertEqual(fixture.ui.browserState.category, "special", "left shoulder should wrap from the first category to the last")
+  fixture.press(fixture.controller.RIGHT_SHOULDER)
+  assertEqual(fixture.ui.browserState.category, "boss_routes", "right shoulder should wrap from the last category to the first")
 end
 
 local function testControllerSelectsAbsoluteGoalAfterScrolling()
@@ -148,12 +152,12 @@ end
 
 local function testDpadMovesBetweenCategoryAndGoalPanes()
   local fixture = uiFixture()
-  fixture.press(fixture.keyboard.KEY_LEFT)
-  assertEqual(fixture.ui.browserState.focusedPane, "categories", "left should focus categories")
-  fixture.press(fixture.keyboard.KEY_DOWN)
-  assertEqual(fixture.ui.browserState.category, "item_unlocks", "down in categories should change active category")
-  fixture.press(fixture.keyboard.KEY_RIGHT)
-  assertEqual(fixture.ui.browserState.focusedPane, "goals", "right should return focus to goals")
+  fixture.press(fixture.controller.DPAD_LEFT)
+  assertEqual(fixture.ui.browserState.focusedPane, "categories", "controller left should focus categories")
+  fixture.press(fixture.controller.DPAD_DOWN)
+  assertEqual(fixture.ui.browserState.category, "item_unlocks", "controller down in categories should change active category")
+  fixture.press(fixture.controller.DPAD_RIGHT)
+  assertEqual(fixture.ui.browserState.focusedPane, "goals", "controller right should return focus to goals")
 end
 
 local function testSearchPreservesSpacesAndPunctuation()
