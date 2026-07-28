@@ -2,7 +2,7 @@ local Events = {}
 
 function Events.normalized(controller)
   local function emit(name)
-    return function() controller.onEvent(name) end
+    return function() controller:onEvent(name) end
   end
   return {
     run = emit("RUN_STARTED"),

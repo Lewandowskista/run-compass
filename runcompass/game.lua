@@ -1,5 +1,6 @@
 local GameAdapter = {}
 GameAdapter.__index = GameAdapter
+local Visibility = require("runcompass.visibility")
 
 local function safe(default, callback)
   if type(callback) ~= "function" then return default end
@@ -24,7 +25,7 @@ local function values(container)
 end
 
 function GameAdapter.new(env)
-  return setmetatable({ env = env }, GameAdapter)
+  return setmetatable({ env = env, observationRooms = {}, floorToken = nil }, GameAdapter)
 end
 
 function GameAdapter:roomKind(dataType, variant, currentRoom)
@@ -93,12 +94,14 @@ function GameAdapter:buildRooms(level, currentIndex, currentRoom, visibility)
   local descriptors = values(safe({}, function() return level:GetRooms() end))
   local rooms, bySafe = {}, {}
   for index, desc in ipairs(descriptors) do
-    local id = desc.ListIndex or desc.GridIndex or index
-    local safeGrid = desc.SafeGridIndex or desc.GridIndex
+    local safeGrid = desc.SafeGridIndex
+    if safeGrid == nil or safeGrid < 0 then safeGrid = desc.GridIndex end
+    local id = safeGrid or desc.ListIndex or index
     local visited = (desc.VisitedCount or 0) > 0 or id == currentIndex
     local displayFlags = desc.DisplayFlags or 0
     local room = {
       id = id,
+      listIndex = desc.ListIndex,
       safeGridIndex = safeGrid,
       visited = visited,
       hidden = not visited and displayFlags == 0,
@@ -127,7 +130,9 @@ function GameAdapter:buildRooms(level, currentIndex, currentRoom, visibility)
       for slot = 0, 7 do
         local door = safe(nil, function() return currentRoom:GetDoor(slot) end)
         local target = door and safe(nil, function() return door.TargetRoomIndex end)
-        if door and target and target >= 0 then current.doors[#current.doors + 1] = { slot = slot, to = target } end
+        local canonical = target
+        if target ~= nil and bySafe[target] then canonical = bySafe[target] end
+        if door and canonical and canonical >= 0 then current.doors[#current.doors + 1] = { slot = slot, to = canonical, cost = door.IsLocked and 1 or 0 } end
       end
     end
   end
@@ -137,6 +142,11 @@ end
 function GameAdapter:build()
   local env, game = self.env, self.env.game
   local level = safe(nil, function() return game:GetLevel() end)
+  local floorToken = tostring(safe("", function() return level:GetStage() end)) .. ":" .. tostring(safe("", function() return level:GetStageType() end))
+  if floorToken ~= self.floorToken then
+    self.floorToken = floorToken
+    self.observationRooms = {}
+  end
   local currentIndex = safe(0, function() return level:GetCurrentRoomIndex() end)
   local currentRoom = safe(nil, function() return level:GetCurrentRoom() end)
   local curses = safe(0, function() return level:GetCurses() end)
@@ -174,11 +184,17 @@ function GameAdapter:build()
       addCharacter(playerTypes.PLAYER_KEEPER_B, "tainted_keeper"); addCharacter(playerTypes.PLAYER_APOLLYON_B, "tainted_apollyon")
       addCharacter(playerTypes.PLAYER_THEFORGOTTEN_B, "tainted_forgotten"); addCharacter(playerTypes.PLAYER_BETHANY_B, "tainted_bethany")
       addCharacter(playerTypes.PLAYER_JACOB_B, "tainted_jacob")
+      local inventory = { collectibles = {}, trinkets = {}, cards = {} }
+      if player.GetCollectibleCount then inventory.collectibleCount = safe(0, function() return player:GetCollectibleCount() end) end
+      if player.GetNumTrinkets then inventory.trinketsCount = safe(0, function() return player:GetNumTrinkets() end) end
       players[#players + 1] = {
         health = (player:GetHearts() or 0) + (player:GetSoulHearts() or 0) + (player:GetBlackHearts() or 0),
         maxHealth = player:GetMaxHearts(),
         keys = player:GetNumKeys(), bombs = player:GetNumBombs(), coins = player:GetNumCoins(),
-        power = player.Damage or 0, playerType = playerType, characterToken = characterTokens[playerType]
+        power = player.Damage or 0, playerType = playerType, characterToken = characterTokens[playerType],
+        stats = { damage = player.Damage or 0, fireRate = player.MaxFireDelay or 0, speed = player.MoveSpeed or 0 },
+        resources = { keys = player:GetNumKeys(), bombs = player:GetNumBombs(), coins = player:GetNumCoins() },
+        inventory = inventory
       }
     end
   end
@@ -188,6 +204,11 @@ function GameAdapter:build()
   if (game.Challenge or 0) > 0 then mode.kind = "challenge"; mode.progressionAllowed = false end
   local seeds = safe(nil, function() return game:GetSeeds() end)
   if seeds and seeds.IsCustomRun and safe(false, function() return seeds:IsCustomRun() end) then mode.progressionAllowed = false end
+  if game.AchievementUnlocksDisallowed and safe(false, function() return game:AchievementUnlocksDisallowed() end) then mode.progressionAllowed = false end
+  local frameId = safe(0, function() return game:GetFrameCount() end)
+  local stage = safe(nil, function() return level:GetStage() end)
+  local stageType = safe(nil, function() return level:GetStageType() end)
+  local victoryLap = safe(0, function() return game:GetVictoryLap() end)
   local rooms = self:buildRooms(level, currentIndex, currentRoom, visibility)
   local currentBossKind = self:detectCurrentBossKind()
   local currentClear = safe(false, function() return currentRoom:IsClear() end)
@@ -197,7 +218,7 @@ function GameAdapter:build()
       if currentBossKind then room.kind = currentBossKind end
     end
   end
-  local pickups = {}
+  local pickups, pickupsByRoom = {}, {}
   local isaac = env.isaac or rawget(_G, "Isaac")
   if isaac and isaac.FindByType then
     local entityType = self.env.entityType or rawget(_G, "EntityType") or {}
@@ -208,19 +229,65 @@ function GameAdapter:build()
         local item = safe(nil, function() return self.env.itemConfig:GetCollectible(pickup.SubType) end)
         quality = item and item.Quality
       end
-      pickups[#pickups + 1] = { variant = pickup.Variant, subtype = pickup.SubType, visible = not visibility.curseBlind, quality = quality }
+      local roomId = pickup.RoomIndex or safe(nil, function() return pickup:GetRoomIndex() end) or currentIndex
+      local entry = {
+        variant = pickup.Variant,
+        subtype = pickup.SubType,
+        category = pickup.Variant == pickupVariant.PICKUP_COLLECTIBLE and "collectible" or "pickup",
+        visible = not visibility.curseBlind,
+        quality = quality
+      }
+      pickups[#pickups + 1] = entry
+      pickupsByRoom[roomId] = pickupsByRoom[roomId] or {}
+      pickupsByRoom[roomId][#pickupsByRoom[roomId] + 1] = entry
     end
   end
-  return {
+  for roomId, roomPickups in pairs(pickupsByRoom) do
+    self.observationRooms[roomId] = { entered = true, pickups = roomPickups }
+  end
+  if currentClear and pickupsByRoom[currentIndex] == nil and self.observationRooms[currentIndex] then
+    self.observationRooms[currentIndex].pickups = {}
+  end
+  for _, room in ipairs(rooms) do
+    if self.observationRooms[room.id] then room.pickups = self.observationRooms[room.id].pickups end
+  end
+  local progress = { achievements = {}, completionMarks = {} }
+  local caps = env.capabilities or {}
+  if caps.persistentAchievements and isaac and isaac.GetPersistentGameData then
+    progress.achievementsAvailable = safe(false, function() return isaac.GetPersistentGameData() ~= nil end)
+  end
+  if caps.completionMarks and isaac and isaac.GetCompletionMarks then
+    for _, p in ipairs(players) do
+      local marks = safe(nil, function() return isaac.GetCompletionMarks(p.playerType) end)
+      if marks ~= nil then progress.completionMarks[p.playerType] = marks end
+    end
+  end
+  local observedPickups = {}
+  for _, observation in pairs(self.observationRooms) do
+    for _, pickup in ipairs(observation.pickups or {}) do observedPickups[#observedPickups + 1] = pickup end
+  end
+  local snapshot = {
+    frameId = frameId,
+    run = {
+      mode = mode.kind,
+      difficulty = mode.difficulty,
+      progressionAllowed = mode.progressionAllowed,
+      victoryLap = victoryLap and victoryLap > 0 or false,
+      elapsedSeconds = frameId / 30
+    },
+    floor = { stage = stage, stageType = stageType, currentRoomId = currentIndex, rooms = rooms },
     currentRoom = currentIndex,
     currentRoomClear = currentClear,
     mode = mode,
     visibility = visibility,
     player = players[1] or {},
     rooms = rooms,
-    observations = { pickups = pickups },
-    timing = { frame = safe(0, function() return currentRoom:GetFrameCount() end) }
+    observations = { pickups = observedPickups, rooms = self.observationRooms },
+    timing = { frame = safe(0, function() return currentRoom:GetFrameCount() end), runFrame = frameId },
+    progress = progress,
+    capabilities = caps
   }
+  return Visibility.sanitizeSnapshot(snapshot)
 end
 
 return GameAdapter

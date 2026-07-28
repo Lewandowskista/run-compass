@@ -1,4 +1,5 @@
 local Presentation = {}
+local Strings = require("runcompass.strings")
 
 function Presentation.lines(recommendation)
   local lines = {}
@@ -9,9 +10,13 @@ function Presentation.lines(recommendation)
   if recommendation.reasonCodes and recommendation.reasonCodes.resource_reservation then
     lines[#lines + 1] = "Preserve required resources"
   end
-  if recommendation.status == "unreachable" then lines[#lines + 1] = "Target is not reachable with current information" end
-  if recommendation.status == "inactive" then lines[#lines + 1] = "Guidance unavailable in this run mode" end
-  lines[#lines + 1] = string.upper(recommendation.confidence or "low") .. " / " .. string.upper(recommendation.capabilityTier or "base")
+  if recommendation.status == "unreachable" then lines[#lines + 1] = Strings.get("hud.unreachable") end
+  if recommendation.status == "inactive" then lines[#lines + 1] = Strings.get("hud.inactive") end
+  if recommendation.status == "prerequisite_redirect" then lines[#lines + 1] = Strings.get("hud.prerequisite") end
+  if recommendation.status == "instructional" then lines[#lines + 1] = Strings.get("hud.instructional") end
+  if recommendation.status == "waiting" then lines[#lines + 1] = Strings.get("hud.waiting") end
+  if recommendation.status == "error" then lines[#lines + 1] = Strings.get("hud.error") end
+  lines[#lines + 1] = Strings.get("hud.confidence", string.upper(recommendation.confidence or "low"), string.upper(recommendation.capabilityTier or "base"))
   return lines
 end
 

@@ -27,7 +27,7 @@ end
 function Goals.resolve(selected, snapshot)
   local resolved = {}
   for key, value in pairs(selected or {}) do resolved[key] = value end
-  if resolved.status == "catalog_update_required" then
+  if resolved.status == "catalog_update_required" or resolved.status == "instructional_only" then
     resolved.status = "instructional"
     resolved.frontier = false
     resolved.destinationRooms = {}

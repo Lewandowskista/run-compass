@@ -1,6 +1,8 @@
 local Rules = {}
 
 Rules.version = 2
+Rules.knownAchievementMax = 637
+Rules.catalogSourceVersion = "repentance-plus-1.0"
 
 -- Current-run-observable rules. Persistent counters remain instructional until
 -- Repentogon can verify them safely.
