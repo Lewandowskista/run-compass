@@ -31,7 +31,7 @@ end
 
 local function detailsFor(entry)
   if not entry then return { name = "No matching goals", statusLabel = "Unavailable" } end
-  local method = entry.unlockMethod or entry.displayRule
+  local method = entry.unlockMethod or entry.displayRule or (entry.kind == "boss" and "Boss route" or "Vanilla unlock")
   local prerequisites = entry.prerequisites or {}
   local details = {
     id = entry.id,
@@ -50,9 +50,9 @@ local function detailsFor(entry)
     lines = {}
   }
   details.lines[#details.lines + 1] = "Status: " .. details.statusLabel
-  if details.requiredCharacterToken then details.lines[#details.lines + 1] = "Character: " .. tostring(details.requiredCharacterToken) end
-  if details.requiredDifficulty then details.lines[#details.lines + 1] = "Difficulty: " .. tostring(details.requiredDifficulty) end
-  if method then details.lines[#details.lines + 1] = "Method: " .. tostring(method) end
+  details.lines[#details.lines + 1] = "Character: " .. tostring(details.requiredCharacterToken or "Any")
+  details.lines[#details.lines + 1] = "Difficulty: " .. tostring(details.requiredDifficulty or "Normal / Hard")
+  details.lines[#details.lines + 1] = "Method: " .. tostring(method)
   details.lines[#details.lines + 1] = "Support: " .. tostring(details.supportTier)
   details.lines[#details.lines + 1] = "Current run: " .. Browser.statusLabel(details.currentRunStatus)
   for _, prerequisite in ipairs(prerequisites) do
@@ -89,7 +89,7 @@ function BrowserModel.build(entries, snapshot, state, pageSize)
   if #goals == 0 then selectedIndex = 0
   elseif selectedIndex < 1 then selectedIndex = 1
   elseif selectedIndex > #goals then selectedIndex = #goals end
-  local maxScroll = math.max(0, #goals - pageSize)
+  local maxScroll = math.max(0, #goals - pageSize + 1)
   local scrollOffset = tonumber(state.scrollOffset) or 0
   if scrollOffset < 0 then scrollOffset = 0 elseif scrollOffset > maxScroll then scrollOffset = maxScroll end
   if selectedIndex > 0 and selectedIndex < scrollOffset then scrollOffset = selectedIndex end

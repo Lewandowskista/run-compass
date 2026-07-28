@@ -37,15 +37,24 @@ local function testKeepsSelectedRowInPageWindow()
   assertEqual(model.rows[10].absoluteIndex, 14, "selected goal should occupy the final visible row")
 end
 
+local function testKeepsFinalSelectionInPersistedPageWindow()
+  local model = BrowserModel.build(entries(), {}, { category = "boss_routes", selectedIndex = 18, scrollOffset = 9 }, 10)
+  assertEqual(model.scrollOffset, 9, "final selection should retain its persisted page offset")
+  assertEqual(model.rows[10].absoluteIndex, 18, "final selected goal should remain visible")
+end
+
 local function testResolvesSortedGoalDetails()
   local model = BrowserModel.build(entries(), {}, { category = "boss_routes", selectedIndex = 1 }, 10)
   assertEqual(model.details.name, "Boss 01", "boss goals should sort by name")
   assertTrue(model.details.statusLabel ~= nil, "details should expose a status label")
+  assertEqual(model.details.lines[2], "Character: Any", "details should provide a default character line")
+  assertEqual(model.details.lines[3], "Difficulty: Normal / Hard", "details should provide a default difficulty line")
+  assertEqual(model.details.lines[4], "Method: Boss route", "boss details should provide the default method")
 end
 
-local tests = { testBuildsLiveCategoryCounts, testKeepsSelectedRowInPageWindow, testResolvesSortedGoalDetails }
+local tests = { testBuildsLiveCategoryCounts, testKeepsSelectedRowInPageWindow, testKeepsFinalSelectionInPersistedPageWindow, testResolvesSortedGoalDetails }
 for index, test in ipairs(tests) do
   test()
   print("navigation ok " .. index)
 end
-print("3 navigation UI tests passed")
+print("4 navigation UI tests passed")
