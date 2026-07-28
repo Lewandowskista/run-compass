@@ -1,6 +1,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
 local BrowserModel = require("runcompass.browser_model")
+local UI = require("runcompass.ui")
 
 local function assertEqual(actual, expected, message)
   if actual ~= expected then error((message or "values differ") .. " (expected " .. tostring(expected) .. ", got " .. tostring(actual) .. ")") end
@@ -92,9 +93,80 @@ local function testClampsOneBasedScrollForEmptyAndShortCategories()
   assertEqual(short.details.name, "Short Boss", "short categories should retain selected details")
 end
 
-local tests = { testBuildsLiveCategoryCounts, testKeepsSelectedRowInPageWindow, testAdvancesPastInclusivePageEndpoint, testKeepsFinalSelectionInPersistedPageWindow, testResolvesSortedGoalDetails, testFiltersCatalogStatusWhileShowingCurrentRunStatus, testExposesCategoryAndRowContract, testClampsOneBasedScrollForEmptyAndShortCategories }
+local function uiFixture()
+  local triggered = nil
+  local selected = nil
+  local keyboard = {
+    KEY_UP = 101, KEY_DOWN = 102, KEY_LEFT = 103, KEY_RIGHT = 104,
+    KEY_ENTER = 105, KEY_ESCAPE = 106, KEY_TAB = 107, KEY_S = 108,
+    KEY_L = 109, KEY_BACKSPACE = 110, KEY_A = 200, KEY_Z = 225,
+    KEY_SPACE = 111, KEY_MINUS = 112, KEY_APOSTROPHE = 113,
+    KEY_COMMA = 114, KEY_PERIOD = 115, KEY_SLASH = 116
+  }
+  local controller = {
+    DPAD_UP = 1, DPAD_DOWN = 2, DPAD_LEFT = 3, DPAD_RIGHT = 4,
+    BUTTON_A = 5, BUTTON_B = 6, BUTTON_X = 7, BUTTON_Y = 8,
+    LEFT_SHOULDER = 9, RIGHT_SHOULDER = 10
+  }
+  local ui = UI.new({
+    input = { IsButtonTriggered = function(code) return code == triggered end },
+    keyboard = keyboard,
+    controller = controller,
+    state = {
+      bindings = { keyboardGoal = 901, keyboardToggle = 902, controllerGoal = 903, controllerToggle = 904 },
+      browser = { category = "boss_routes", kind = "all", status = "all", alphabet = "all", character = "all", unlockMethod = "all", completionMark = "all" },
+      hud = { visible = true },
+      pinned = false
+    },
+    entries = entries(),
+    onGoalSelected = function(goal) selected = goal end
+  })
+  ui.open = true
+  return {
+    ui = ui,
+    keyboard = keyboard,
+    controller = controller,
+    press = function(code) triggered = code; ui:input(); triggered = nil end,
+    selected = function() return selected end
+  }
+end
+
+local function testShouldersChangeCategories()
+  local fixture = uiFixture()
+  fixture.press(fixture.controller.RIGHT_SHOULDER)
+  assertEqual(fixture.ui.browserState.category, "item_unlocks", "right shoulder should advance the category")
+  fixture.press(fixture.controller.LEFT_SHOULDER)
+  assertEqual(fixture.ui.browserState.category, "boss_routes", "left shoulder should restore the category")
+end
+
+local function testControllerSelectsAbsoluteGoalAfterScrolling()
+  local fixture = uiFixture()
+  for _ = 1, 13 do fixture.press(fixture.controller.DPAD_DOWN) end
+  fixture.press(fixture.controller.BUTTON_A)
+  assertEqual(fixture.selected().name, "Boss 14", "controller selection should use the absolute highlighted goal")
+end
+
+local function testDpadMovesBetweenCategoryAndGoalPanes()
+  local fixture = uiFixture()
+  fixture.press(fixture.keyboard.KEY_LEFT)
+  assertEqual(fixture.ui.browserState.focusedPane, "categories", "left should focus categories")
+  fixture.press(fixture.keyboard.KEY_DOWN)
+  assertEqual(fixture.ui.browserState.category, "item_unlocks", "down in categories should change active category")
+  fixture.press(fixture.keyboard.KEY_RIGHT)
+  assertEqual(fixture.ui.browserState.focusedPane, "goals", "right should return focus to goals")
+end
+
+local function testSearchPreservesSpacesAndPunctuation()
+  local fixture = uiFixture()
+  fixture.ui.query = "King"
+  fixture.press(fixture.keyboard.KEY_SPACE)
+  fixture.press(fixture.keyboard.KEY_APOSTROPHE)
+  assertEqual(fixture.ui.query, "King '", "search should preserve spaces and apostrophes")
+end
+
+local tests = { testBuildsLiveCategoryCounts, testKeepsSelectedRowInPageWindow, testAdvancesPastInclusivePageEndpoint, testKeepsFinalSelectionInPersistedPageWindow, testResolvesSortedGoalDetails, testFiltersCatalogStatusWhileShowingCurrentRunStatus, testExposesCategoryAndRowContract, testClampsOneBasedScrollForEmptyAndShortCategories, testShouldersChangeCategories, testControllerSelectsAbsoluteGoalAfterScrolling, testDpadMovesBetweenCategoryAndGoalPanes, testSearchPreservesSpacesAndPunctuation }
 for index, test in ipairs(tests) do
   test()
   print("navigation ok " .. index)
 end
-print("8 navigation UI tests passed")
+print("12 navigation UI tests passed")

@@ -16,7 +16,18 @@ local Strings = {
     warning = "Warning: %s"
   },
   browser = {
-    title = "Run Compass - goal browser",
+    title = "Run Compass",
+    search = "Search: %s",
+    empty = "No matching goals",
+    eligible = "ELIGIBLE",
+    unavailable = "UNAVAILABLE",
+    completed = "COMPLETED",
+    categoryControls = "LB/RB Category",
+    filterControls = "X Filter  Y Status",
+    selectControls = "A Select  B Close",
+    prerequisites = "Prerequisites",
+    supportTier = "Support: %s",
+    currentRun = "Current run: %s",
     filters = "kind=%s status=%s letter=%s",
     mcmNotice = "Install Mod Config Menu for bindings and HUD settings"
   }
