@@ -41,9 +41,53 @@ local function testPlannerExploreUsesRankedFrontier()
   assertTrue(result.reasonCodes.ranked_frontier, "explanation should identify ranked frontier selection")
 end
 
+local function testExploreRecommendationIncludesVisibleItemDecision()
+  local value = snapshot()
+  value.currentRoom = 3
+  value.rooms[3].visited = true
+  value.rooms[3].clear = true
+  value.rooms[3].doors = { { slot = 0, to = 1 } }
+  value.visibleChoices = {
+    {
+      id = "3:collectible:100",
+      roomId = 3,
+      kind = "collectible",
+      position = { x = 320, y = 280 },
+      observedIdentity = { id = 100, name = "Test Relic", quality = 4 },
+      eligibleActors = { "primary" },
+      confidence = "high"
+    }
+  }
+  local models = {
+    featureSummary = function() return { effects = {}, tags = {} } end,
+    evaluate = function()
+      return { effects = { offense = 4 }, reasonCodes = { character_synergy = true }, warnings = {}, ruleIds = {}, confidence = "high" }
+    end
+  }
+  local result = Planner.plan(value, { id = "boss.mega_satan", destinationRooms = {}, frontier = true }, nil, models)
+  assertTrue(result.decision and result.decision.primary, "explore state must retain visible choices")
+  assertEqual(result.decision.primary.action, "take", "valuable visible pedestal should recommend TAKE")
+  assertEqual(result.decision.primary.position.x, 320, "entity marker position must survive finalization")
+end
+
+local function testExploreHysteresisKeepsValidEquivalentDoor()
+  local value = snapshot()
+  local previous = {
+    status = "explore",
+    nextDoorSlot = 0,
+    score = 1000,
+    steps = { "Keep stable frontier" },
+    reasonCodes = { ranked_frontier = true }
+  }
+  local result = Planner.plan(value, { id = "boss.mega_satan", destinationRooms = {}, frontier = true }, previous)
+  assertEqual(result.nextDoorSlot, 0, "valid equivalent-risk frontier should retain the previous door")
+end
+
 local tests = {
   testRanksKnownTreasureFrontierAboveNormalFrontier,
-  testPlannerExploreUsesRankedFrontier
+  testPlannerExploreUsesRankedFrontier,
+  testExploreRecommendationIncludesVisibleItemDecision,
+  testExploreHysteresisKeepsValidEquivalentDoor
 }
 
 for index, test in ipairs(tests) do test(); print("guidance ok " .. index) end

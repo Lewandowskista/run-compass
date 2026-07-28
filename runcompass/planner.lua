@@ -3,8 +3,8 @@ local Visibility = require("runcompass.visibility")
 local Milestones = require("runcompass.milestones")
 local Search = require("runcompass.search")
 local Valuation = require("runcompass.valuation")
-local ChoiceEngine = require("runcompass.choice_engine")
 local Frontier = require("runcompass.frontier")
+local Recommendation = require("runcompass.recommendation")
 
 local SUPPORTED_MODES = { normal = true, hard = true }
 
@@ -118,8 +118,34 @@ local function doorExists(snapshot, slot)
   return false
 end
 
+local ACTIONABLE_STATUS = { ok = true, explore = true }
+
+local function previousChoiceStillExists(snapshot, previous)
+  local primary = previous.decision and previous.decision.primary
+  if not primary or not primary.choiceId then return true end
+  for _, choice in ipairs(snapshot.visibleChoices or {}) do
+    if choice.roomId == snapshot.currentRoom and choice.id == primary.choiceId then return true end
+  end
+  return false
+end
+
+local function decisionStillEquivalent(previous, recommendation)
+  local old = previous.decision and previous.decision.primary
+  local new = recommendation.decision and recommendation.decision.primary
+  if old == nil and new == nil then return true end
+  if old == nil or new == nil then return false end
+  return old.choiceId == new.choiceId
+    and old.action == new.action
+    and old.actorToken == new.actorToken
+    and (old.scoreVector and old.scoreVector.feasible) == (new.scoreVector and new.scoreVector.feasible)
+    and (old.scoreVector and old.scoreVector.resourceMargin) == (new.scoreVector and new.scoreVector.resourceMargin)
+end
+
 local function keepPrevious(snapshot, previous, recommendation)
-  if not previous or previous.status ~= "ok" or not doorExists(snapshot, previous.nextDoorSlot) then return false end
+  if not previous or not ACTIONABLE_STATUS[previous.status] or not ACTIONABLE_STATUS[recommendation.status]
+      or not doorExists(snapshot, previous.nextDoorSlot)
+      or not previousChoiceStillExists(snapshot, previous)
+      or not decisionStillEquivalent(previous, recommendation) then return false end
   if previous.nextDoorSlot == recommendation.nextDoorSlot then return true end
   local oldScore, newScore = tonumber(previous.score) or 0, tonumber(recommendation.score) or 0
   if newScore <= oldScore then return true end
@@ -195,7 +221,7 @@ function Planner.plan(snapshot, goal, previous, decisionModels)
       local step = candidate.roomKind == "treasure" and "Take the treasure-room detour"
         or candidate.roomKind == "shop" and "Check the worthwhile shop route"
         or "Explore the best revealed frontier"
-      return {
+      local recommendation = {
         status = "explore",
         nextDoorSlot = candidate.doorSlot,
         steps = { step, "Replan when the target branch appears" },
@@ -205,6 +231,9 @@ function Planner.plan(snapshot, goal, previous, decisionModels)
         confidence = "low",
         capabilityTier = capabilityTier(snapshot)
       }
+      recommendation = Recommendation.finalize(snapshot, goal, recommendation, milestone, decisionModels)
+      if keepPrevious(snapshot, previous, recommendation) then return previous end
+      return recommendation
     end
   end
   local hiddenDestination = false
@@ -247,18 +276,8 @@ function Planner.plan(snapshot, goal, previous, decisionModels)
     return left.score > right.score
   end)
   local recommendation = recommendationForPath(snapshot, roomMap, paths[1])
-  local visibleChoices = {}
-  for _, choice in ipairs(snapshot.visibleChoices or {}) do
-    if choice.roomId == snapshot.currentRoom then visibleChoices[#visibleChoices + 1] = choice end
-  end
-  if #visibleChoices > 0 then
-    recommendation.decision = ChoiceEngine.evaluate(snapshot, visibleChoices, goal, decisionModels or snapshot.decisionModels, snapshot.eid)
-  end
-  for code, enabled in pairs(milestone.reasonCodes or {}) do recommendation.reasonCodes[code] = enabled end
-  if next(milestone.requiredItems) then recommendation.reasonCodes.required_quest_items = true end
-  if keepPrevious(snapshot, previous, recommendation) then
-    return previous
-  end
+  recommendation = Recommendation.finalize(snapshot, goal, recommendation, milestone, decisionModels)
+  if keepPrevious(snapshot, previous, recommendation) then return previous end
   return recommendation
 end
 
