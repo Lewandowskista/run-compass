@@ -4,7 +4,7 @@
 <img src="https://raw.githubusercontent.com/Lewandowskista/run-compass/main/docs/images/run-compass-observatory-mark.png" alt="Run Compass Observatory mark" width="96" align="right">
 
 [![Version 1.1.0](https://img.shields.io/badge/version-1.1.0-8be04e?style=flat-square&labelColor=101b33)](metadata.xml)
-[![Tests](https://img.shields.io/badge/tests-fengari%20fixtures-8be04e?style=flat-square&labelColor=101b33)](docs/RELEASES.md)
+[![Tests](https://img.shields.io/badge/tests-fengari%20fixtures-8be04e?style=flat-square&labelColor=101b33)](https://github.com/Lewandowskista/run-compass/blob/main/docs/RELEASES.md)
 [![Fair play](https://img.shields.io/badge/fair--play-visible%20information-8be04e?style=flat-square&labelColor=101b33)](https://github.com/Lewandowskista/run-compass/blob/main/docs/FAIR_PLAY.md)
 
 Run Compass is an Observatory for **The Binding of Isaac: Repentance+**: a fair-play route and build guide for solo Normal and Hard runs. Pick a boss or vanilla unlock, then get a compact next-door and visible-choice recommendation as the floor reveals itself. It is a decision aid, not an oracle—there is no guaranteed optimal play.
