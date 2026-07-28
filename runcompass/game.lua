@@ -368,16 +368,18 @@ function GameAdapter:build()
     curseLost = levelCurse.CURSE_OF_THE_LOST and (curses & levelCurse.CURSE_OF_THE_LOST) ~= 0 or false
   }
   local players = {}
+  local independentPlayers = 0
   local count = safe(1, function() return game:GetNumPlayers() end)
   for index = 0, count - 1 do
     local player = safe(nil, function() return game:GetPlayer(index) end)
     if player then
+      if not safe(false, function() return player:IsSubPlayer() end) then independentPlayers = independentPlayers + 1 end
       players[#players + 1] = self:buildPlayer(player)
     end
   end
   local difficulty = rawget(_G, "Difficulty") or {}
   local hard = difficulty.DIFFICULTY_HARD and game.Difficulty == difficulty.DIFFICULTY_HARD
-  local mode = { kind = safe(false, function() return game:IsGreedMode() end) and "greed" or "normal", difficulty = hard and "hard" or "normal", coOp = count > 1, progressionAllowed = true }
+  local mode = { kind = safe(false, function() return game:IsGreedMode() end) and "greed" or "normal", difficulty = hard and "hard" or "normal", coOp = independentPlayers > 1, progressionAllowed = true }
   if (game.Challenge or 0) > 0 then mode.kind = "challenge"; mode.progressionAllowed = false end
   local seeds = safe(nil, function() return game:GetSeeds() end)
   if seeds and seeds.IsCustomRun and safe(false, function() return seeds:IsCustomRun() end) then mode.progressionAllowed = false end

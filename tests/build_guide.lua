@@ -160,6 +160,43 @@ local function testGameAdapterNormalizesGoldenAndSmeltedTrinkets()
   assertTrue(trinkets[2].smelted, "Repentogon smelted trinkets should be retained when probed")
 end
 
+local function modeSnapshotForPlayers(rawPlayers)
+  local currentRoom = { IsClear = function() return true end, GetFrameCount = function() return 1 end, GetDoor = function() return nil end }
+  local level = {
+    GetCurrentRoomIndex = function() return 1 end,
+    GetCurrentRoom = function() return currentRoom end,
+    GetCurses = function() return 0 end,
+    GetStage = function() return 1 end,
+    GetStageType = function() return 0 end,
+    GetRooms = function() return { { GridIndex = 1, SafeGridIndex = 1, VisitedCount = 1, DisplayFlags = 1, Data = { Type = 1 } } } end
+  }
+  local game = {
+    GetLevel = function() return level end,
+    GetNumPlayers = function() return #rawPlayers end,
+    GetPlayer = function(_, index) return rawPlayers[index + 1] end,
+    IsGreedMode = function() return false end,
+    GetSeeds = function() return nil end,
+    GetFrameCount = function() return 1 end
+  }
+  return GameAdapter.new({ game = game, collectibleType = { NUM_COLLECTIBLES = 1 }, roomType = {} }):build()
+end
+
+local function testGameAdapterTreatsJacobAndEsauTwinAsSolo()
+  local snapshot = modeSnapshotForPlayers({
+    { GetPlayerType = function() return 1 end, IsSubPlayer = function() return false end },
+    { GetPlayerType = function() return 2 end, IsSubPlayer = function() return true end }
+  })
+  assertEqual(snapshot.mode.coOp, false, "a character-controlled twin must not disable solo guidance")
+end
+
+local function testGameAdapterStillDetectsTrueCoop()
+  local snapshot = modeSnapshotForPlayers({
+    { GetPlayerType = function() return 1 end, IsSubPlayer = function() return false end },
+    { GetPlayerType = function() return 2 end, IsSubPlayer = function() return false end }
+  })
+  assertEqual(snapshot.mode.coOp, true, "two independent players must remain unsupported co-op")
+end
+
 local function testVisibleChoiceNormalizesObservedPickupAndPrice()
   local adapter = GameAdapter.new({ pickupVariant = { PICKUP_COLLECTIBLE = 100 }, itemConfig = { GetCollectible = function() return { Name = "Test Relic", Quality = 4, Tags = 8 } end } })
   local choice = adapter:buildVisibleChoice({ Variant = 100, SubType = 200, Price = 15, OptionsPickupIndex = 2, InitSeed = 777, Position = { X = 40, Y = 50 } }, 9, { curseBlind = false })
@@ -298,6 +335,6 @@ local function testSaveV3MigratesDecisionSettingsSafely()
   assertEqual(saved.browser.alphabet, "Z", "browser preferences should migrate")
 end
 
-local tests = { testBuildStateNormalizesOwnedInventory, testFeatureModelAppliesOwnedSynergy, testFeatureSummaryAggregatesOwnedBuild, testTagSynergyUsesIndexedBuildFeatures, testChoiceEngineRanksTakeOverSkipWhenGoalRelevant, testChoiceEngineRejectsUnaffordablePurchase, testChoiceEngineUsesLexicographicSafetyBeforeBuildGain, testChoiceEngineExplainsChargedActiveReplacementLoss, testCatalogBuildsBaselineModelsForEveryLiveItem, testCharacterModifierAndUnknownFallbackAreExplicit, testTransformationThresholdProducesReasonCode, testCharacterRestrictionProducesWarningInsteadOfFalseSynergy, testGameAdapterCapturesOwnedItemsAndActives, testGameAdapterNormalizesGoldenAndSmeltedTrinkets, testVisibleChoiceNormalizesObservedPickupAndPrice, testVisibleActiveChoiceExposesReplacementConsequence, testVisiblePillIdentityRequiresIdentificationProbe, testAdapterCatalogsTrinketsCardsAndPills, testAdapterCapturesVisibleMachineInteractions, testAdapterExposesAvailableRerollDecision, testChoiceEngineDoesNotGuessBlindItemIdentity, testCompatibilityAPIRegistersModelsAndRules, testPlannerReturnsVisibleDecisionAlongsideRoute, testEIDIsOptionalDescriptionOnly, testSaveV3MigratesDecisionSettingsSafely }
+local tests = { testBuildStateNormalizesOwnedInventory, testFeatureModelAppliesOwnedSynergy, testFeatureSummaryAggregatesOwnedBuild, testTagSynergyUsesIndexedBuildFeatures, testChoiceEngineRanksTakeOverSkipWhenGoalRelevant, testChoiceEngineRejectsUnaffordablePurchase, testChoiceEngineUsesLexicographicSafetyBeforeBuildGain, testChoiceEngineExplainsChargedActiveReplacementLoss, testCatalogBuildsBaselineModelsForEveryLiveItem, testCharacterModifierAndUnknownFallbackAreExplicit, testTransformationThresholdProducesReasonCode, testCharacterRestrictionProducesWarningInsteadOfFalseSynergy, testGameAdapterCapturesOwnedItemsAndActives, testGameAdapterNormalizesGoldenAndSmeltedTrinkets, testGameAdapterTreatsJacobAndEsauTwinAsSolo, testGameAdapterStillDetectsTrueCoop, testVisibleChoiceNormalizesObservedPickupAndPrice, testVisibleActiveChoiceExposesReplacementConsequence, testVisiblePillIdentityRequiresIdentificationProbe, testAdapterCatalogsTrinketsCardsAndPills, testAdapterCapturesVisibleMachineInteractions, testAdapterExposesAvailableRerollDecision, testChoiceEngineDoesNotGuessBlindItemIdentity, testCompatibilityAPIRegistersModelsAndRules, testPlannerReturnsVisibleDecisionAlongsideRoute, testEIDIsOptionalDescriptionOnly, testSaveV3MigratesDecisionSettingsSafely }
 for index, test in ipairs(tests) do test(); print("build ok " .. index) end
 print(#tests .. " build-guide tests passed")
