@@ -93,7 +93,7 @@ function BrowserModel.build(entries, snapshot, state, pageSize)
   local scrollOffset = tonumber(state.scrollOffset) or 0
   if scrollOffset < 0 then scrollOffset = 0 elseif scrollOffset > maxScroll then scrollOffset = maxScroll end
   if selectedIndex > 0 and selectedIndex < scrollOffset then scrollOffset = selectedIndex end
-  if selectedIndex > scrollOffset + pageSize then scrollOffset = selectedIndex - pageSize + 1 end
+  if selectedIndex > scrollOffset + pageSize - 1 then scrollOffset = selectedIndex - pageSize + 1 end
   local rows = {}
   local firstRowIndex = scrollOffset == 0 and 1 or scrollOffset
   for index = firstRowIndex, math.min(#goals, firstRowIndex + pageSize - 1) do
