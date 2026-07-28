@@ -122,6 +122,130 @@ local function testCompactCardUsesStrongestReasonAndWarning()
   assertEqual(#view.warnings, 1, "compact card should preserve the strongest warning")
 end
 
+local function testCompactCardShowsConfidenceOnlyWhenEnabled()
+  local recommendation = {
+    status = "ok",
+    steps = { "Take the treasure-room detour" },
+    confidence = "high",
+    capabilityTier = "enhanced",
+    decision = {
+      primary = {
+        action = "take",
+        name = "Test Relic",
+        reasonCodes = { character_synergy = true },
+        warnings = {},
+        confidence = "high"
+      }
+    }
+  }
+  local shown = Hud.view(recommendation, "Mega Satan", true, { showConfidence = true })
+  local hidden = Hud.view(recommendation, "Mega Satan", true, { showConfidence = false })
+  local function joined(view) return table.concat(view.lines, "\n") end
+  assertTrue(string.find(joined(shown), "HIGH", 1, true) ~= nil, "confidence line should render when showConfidence is enabled")
+  assertTrue(string.find(joined(hidden), "HIGH", 1, true) == nil, "confidence line should be omitted when showConfidence is disabled")
+end
+
+local function testCompactCardShowsWarningTextOnlyWhenEnabled()
+  local recommendation = {
+    status = "ok",
+    steps = { "Take the treasure-room detour" },
+    confidence = "high",
+    decision = {
+      primary = {
+        action = "take",
+        name = "Test Relic",
+        reasonCodes = { character_synergy = true },
+        warnings = { "active_replacement_loss" },
+        confidence = "high"
+      }
+    }
+  }
+  local shown = Hud.view(recommendation, "Mega Satan", true, { showWarnings = true })
+  local hidden = Hud.view(recommendation, "Mega Satan", true, { showWarnings = false })
+  local function joined(view) return table.concat(view.lines, "\n") end
+  assertTrue(string.find(joined(shown), "active_replacement_loss", 1, true) ~= nil, "warning text should render when showWarnings is enabled")
+  assertTrue(string.find(joined(hidden), "active_replacement_loss", 1, true) == nil, "warning text should be omitted when showWarnings is disabled")
+end
+
+local function testAutoCompareGatesChoiceMarkerAndAction()
+  local recommendation = {
+    status = "ok",
+    steps = { "Explore" },
+    confidence = "high",
+    decision = {
+      primary = {
+        action = "take",
+        name = "Test Relic",
+        position = { x = 320, y = 280 },
+        reasonCodes = {},
+        warnings = {},
+        confidence = "high"
+      }
+    }
+  }
+  local enabled = Hud.view(recommendation, "Mega Satan", false, { autoCompare = true })
+  local disabled = Hud.view(recommendation, "Mega Satan", false, { autoCompare = false })
+  assertTrue(enabled.choicePosition ~= nil, "choice marker should be present when autoCompare is enabled")
+  assertEqual(enabled.action, "TAKE", "action should be present when autoCompare is enabled")
+  assertEqual(disabled.choicePosition, nil, "choice marker should be gated off when autoCompare is disabled")
+  assertEqual(disabled.action, nil, "action should be gated off when autoCompare is disabled")
+end
+
+local function testNonActionableStatusRendersReadableText()
+  local recommendation = { status = "unreachable", steps = {}, reasonCodes = {}, confidence = "low" }
+  local view = Hud.view(recommendation, "Mega Satan", false, {})
+  local joined = table.concat(view.lines, "\n")
+  assertTrue(string.find(joined, "hidden_information", 1, true) == nil, "raw reason codes must not leak as HUD text")
+  assertTrue(string.find(joined, "unreachable this run", 1, true) ~= nil, "non-actionable status should render readable text")
+end
+
+local function testDetailLevelScalesStepAndReasonLines()
+  local recommendation = {
+    status = "ok",
+    steps = { "Step one", "Step two", "Step three" },
+    confidence = "high",
+    decision = {
+      primary = {
+        action = "take",
+        name = "Test Relic",
+        reasonCodes = { character_synergy = true },
+        warnings = {},
+        confidence = "high"
+      }
+    }
+  }
+  local minimal = Hud.view(recommendation, "Mega Satan", true, { detailLevel = 1 })
+  local full = Hud.view(recommendation, "Mega Satan", true, { detailLevel = 3 })
+  local minimalText = table.concat(minimal.lines, "\n")
+  local fullText = table.concat(full.lines, "\n")
+  assertTrue(string.find(minimalText, "Step one", 1, true) == nil, "detail level 1 should suppress step lines")
+  assertTrue(string.find(minimalText, "character_synergy", 1, true) == nil, "detail level 1 should suppress reason lines")
+  assertTrue(string.find(fullText, "Step one", 1, true) ~= nil, "detail level 3 should include step lines")
+  assertTrue(string.find(fullText, "character_synergy", 1, true) ~= nil, "detail level 3 should include reason lines")
+end
+
+local function testEidDescriptionsSettingGatesDescriptionText()
+  local recommendation = {
+    status = "ok",
+    steps = {},
+    confidence = "high",
+    decision = {
+      primary = {
+        action = "take",
+        name = "Test Relic",
+        description = "This relic does something notable",
+        reasonCodes = {},
+        warnings = {},
+        confidence = "high"
+      }
+    }
+  }
+  local shown = Hud.view(recommendation, "Mega Satan", true, { eidDescriptions = true, detailLevel = 3 })
+  local hidden = Hud.view(recommendation, "Mega Satan", true, { eidDescriptions = false, detailLevel = 3 })
+  assertTrue(string.find(table.concat(shown.lines, "\n"), "notable", 1, true) ~= nil, "EID description should render when eidDescriptions is enabled")
+  assertTrue(string.find(table.concat(hidden.lines, "\n"), "notable", 1, true) == nil, "EID description should be omitted when eidDescriptions is disabled")
+end
+
 local function testRemovedChoiceCannotLeaveStaleMarker()
   local value = snapshot()
   value.visibleChoices = {
@@ -175,6 +299,12 @@ local tests = {
   testExploreHysteresisKeepsValidEquivalentDoor,
   testDoorPositionUsesGameRoom,
   testCompactCardUsesStrongestReasonAndWarning,
+  testCompactCardShowsConfidenceOnlyWhenEnabled,
+  testCompactCardShowsWarningTextOnlyWhenEnabled,
+  testAutoCompareGatesChoiceMarkerAndAction,
+  testNonActionableStatusRendersReadableText,
+  testDetailLevelScalesStepAndReasonLines,
+  testEidDescriptionsSettingGatesDescriptionText,
   testRemovedChoiceCannotLeaveStaleMarker,
   testEidDescriptionCannotChangeChoiceScore,
   testBlindChoiceCannotReceiveItemAdviceOrEidText,

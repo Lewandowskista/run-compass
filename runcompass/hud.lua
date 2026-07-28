@@ -1,4 +1,14 @@
 local Hud = {}
+local Strings = require("runcompass.strings")
+
+local NON_ACTIONABLE_STATUS_KEYS = {
+  unreachable = "hud.unreachable",
+  inactive = "hud.inactive",
+  prerequisite_redirect = "hud.prerequisite",
+  instructional = "hud.instructional",
+  waiting = "hud.waiting",
+  error = "hud.error"
+}
 
 local REASON_PRIORITY = {
   "goal_resource_reserved",
@@ -31,16 +41,42 @@ function Hud.doorPosition(game, slot)
   return { x = value.X or 0, y = value.Y or 0 }
 end
 
-function Hud.view(recommendation, targetName, expanded)
-  local primary = recommendation.decision and recommendation.decision.primary or nil
+function Hud.view(recommendation, targetName, expanded, settings)
+  settings = settings or {}
+  local autoCompare = settings.autoCompare ~= false
+  local detailLevel = math.max(1, math.min(3, tonumber(settings.detailLevel) or 3))
+  local showConfidence = settings.showConfidence ~= false
+  local showWarnings = settings.showWarnings ~= false
+  local eidDescriptions = settings.eidDescriptions ~= false
+
+  local primary = autoCompare and recommendation.decision and recommendation.decision.primary or nil
   local lines = {}
+  local collapsedStepBudget = detailLevel >= 2 and 1 or 0
+  local expandedStepBudget = detailLevel >= 3 and 3 or (detailLevel == 2 and 2 or 0)
+  local stepBudget = expanded and expandedStepBudget or collapsedStepBudget
   for index, step in ipairs(recommendation.steps or {}) do
-    if index > (expanded and 3 or 1) then break end
+    if index > stepBudget then break end
     lines[#lines + 1] = step
   end
+
+  local nonActionableKey = NON_ACTIONABLE_STATUS_KEYS[recommendation.status]
+  if nonActionableKey then lines[#lines + 1] = Strings.get(nonActionableKey) end
+
   local reason = primary and Hud.strongestReason(primary.reasonCodes) or Hud.strongestReason(recommendation.reasonCodes)
-  if reason then lines[#lines + 1] = reason end
+  if reason and detailLevel >= 2 then lines[#lines + 1] = reason end
   if primary and primary.name then lines[#lines + 1] = primary.name end
+  if primary and eidDescriptions and primary.description and detailLevel >= 3 then lines[#lines + 1] = primary.description end
+
+  local strongestWarning = primary and primary.warnings and primary.warnings[1] or nil
+  if showWarnings and strongestWarning then
+    lines[#lines + 1] = Strings.get("hud.warning", tostring(strongestWarning))
+  end
+
+  local confidenceValue = primary and primary.confidence or recommendation.confidence
+  if showConfidence and confidenceValue then
+    lines[#lines + 1] = Strings.get("hud.confidence", string.upper(tostring(confidenceValue)), string.upper(recommendation.capabilityTier or "base"))
+  end
+
   while not expanded and #lines > 4 do table.remove(lines) end
   return {
     target = targetName,
@@ -49,7 +85,7 @@ function Hud.view(recommendation, targetName, expanded)
     action = primary and string.upper(primary.action or "") or nil,
     choiceName = primary and primary.name or nil,
     choicePosition = primary and primary.position or nil,
-    confidence = primary and primary.confidence or recommendation.confidence,
+    confidence = confidenceValue,
     warnings = primary and primary.warnings or {},
     nextDoorSlot = recommendation.nextDoorSlot,
     expanded = expanded == true

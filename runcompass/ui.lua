@@ -25,6 +25,14 @@ local function renderText(isaac, text, x, y, scale, color)
   end
 end
 
+local function toScreen(isaac, x, y)
+  if type(isaac.WorldToScreen) == "function" and type(Vector) == "function" then
+    local ok, screen = pcall(isaac.WorldToScreen, Vector(x, y))
+    if ok and screen then return screen.X or x, screen.Y or y end
+  end
+  return x, y
+end
+
 local function cycle(values, value)
   local current = 1
   for index, candidate in ipairs(values) do
@@ -298,7 +306,7 @@ function UI:render(snapshot, recommendation)
   local selectedGoal = type(self.env.getSelectedGoal) == "function" and self.env.getSelectedGoal() or nil
   local targetName = selectedGoal and selectedGoal.name or Strings.get("hud.unknownGoal")
   local expanded = self.detailHeld == true
-  local view = Hud.view(recommendation, targetName, expanded)
+  local view = Hud.view(recommendation, targetName, expanded, self.env.state.decision)
   local scale = self.env.state.hud.scale or 1
   local cardX = 20 + (self.env.state.hud.x or 0)
   local cardY = 18 + (self.env.state.hud.y or 0)
@@ -313,17 +321,19 @@ function UI:render(snapshot, recommendation)
 
   local doorPosition = Hud.doorPosition(self.env.game, view.nextDoorSlot)
   if doorPosition then
+    local screenX, screenY = toScreen(isaac, doorPosition.x, doorPosition.y)
     local rotations = { [0] = 180, [1] = -90, [2] = 0, [3] = 90, [4] = 180, [5] = -90, [6] = 0, [7] = 90 }
     if self.arrowSprite then
       self.arrowSprite.Rotation = rotations[view.nextDoorSlot] or 0
       self.arrowSprite.Scale = Vector(0.5 * scale, 0.5 * scale)
-      self.arrowSprite:Render(Vector(doorPosition.x, doorPosition.y))
+      self.arrowSprite:Render(Vector(screenX, screenY))
     else
-      renderText(isaac, "→", doorPosition.x - 8, doorPosition.y - 8, 0.5 * scale, { 1, 0.84, 0.2, 1 })
+      renderText(isaac, "→", screenX - 8, screenY - 8, 0.5 * scale, { 1, 0.84, 0.2, 1 })
     end
   end
 
   if view.choicePosition then
+    local screenX, screenY = toScreen(isaac, view.choicePosition.x, view.choicePosition.y)
     local animation = view.action == "SKIP" and "Skip"
       or view.action == "REROLL" and "Reroll"
       or (view.warnings and #view.warnings > 0) and "Caution"
@@ -331,9 +341,9 @@ function UI:render(snapshot, recommendation)
     if self.markerSprite then
       self.markerSprite:Play(animation, true)
       self.markerSprite.Scale = Vector(0.65 * scale, 0.65 * scale)
-      self.markerSprite:Render(Vector(view.choicePosition.x, view.choicePosition.y - 24))
+      self.markerSprite:Render(Vector(screenX, screenY - 24))
     else
-      renderText(isaac, view.action or "◆", view.choicePosition.x - 12, view.choicePosition.y - 24, 0.45 * scale, { 0.55, 0.9, 0.62, 1 })
+      renderText(isaac, view.action or "◆", screenX - 12, screenY - 24, 0.45 * scale, { 0.55, 0.9, 0.62, 1 })
     end
   end
 end

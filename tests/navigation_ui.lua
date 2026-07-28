@@ -364,7 +364,95 @@ local function testHeldDetailBindingExpandsWithoutToggling()
   assertEqual(ui.detailHeld, false, "releasing the key should restore compact mode")
 end
 
-local tests = { testBuildsLiveCategoryCounts, testKeepsSelectedRowInPageWindow, testAdvancesPastInclusivePageEndpoint, testKeepsFinalSelectionInPersistedPageWindow, testResolvesSortedGoalDetails, testPreservesReadablePrerequisiteDetails, testFiltersCatalogStatusWhileShowingCurrentRunStatus, testExposesCategoryAndRowContract, testClampsOneBasedScrollForEmptyAndShortCategories, testShouldersChangeCategories, testControllerSelectsAbsoluteGoalAfterScrolling, testDpadMovesBetweenCategoryAndGoalPanes, testSearchPreservesSpacesAndPunctuation, testActionControllerNavigatesWithoutControllerTable, testActionConfirmWinsOverOpenBrowserBinding, testSearchEditResetsSelectionBeforeConfirmingNarrowedResult, testEmptyConfirmDoesNotCloseBrowser, testBrowserModelUsesLiveSnapshotWithoutMutatingFilters, testRenderTextUsesScaledTextArgumentOrder, testHudRendersSelectedGoalNameInsteadOfInternalId, testHudUsesReadableFallbackWhenSelectedGoalIsMissing, testHeldDetailBindingExpandsWithoutToggling }
+local function testDoorMarkerConvertsWorldToScreenWhenAvailable()
+  local rendered = {}
+  local requestedVector
+  local isaac = {
+    RenderScaledText = function(text, x, y, ...) rendered[#rendered + 1] = { text = text, x = x, y = y } end,
+    WorldToScreen = function(vector)
+      requestedVector = vector
+      return { X = vector.x + 1000, Y = vector.y + 2000 }
+    end
+  }
+  _G.Vector = function(x, y) return { x = x, y = y } end
+  local ui = UI.new({
+    isaac = isaac,
+    game = {
+      GetRoom = function()
+        return { GetDoorSlotPosition = function(_, slot) return { X = 50, Y = 60 } end }
+      end
+    },
+    getSelectedGoal = function() return { id = "boss.mega_satan", name = "Mega Satan" } end,
+    state = {
+      bindings = {}, browser = {}, hud = { visible = true }, pinned = false, decision = {}
+    },
+    entries = entries()
+  })
+  ui:render({ currentRoomClear = true }, { status = "ok", steps = { "Explore" }, nextDoorSlot = 2 })
+  _G.Vector = nil
+  assertTrue(requestedVector ~= nil, "WorldToScreen should be called with a world-space Vector")
+  local found = false
+  for _, call in ipairs(rendered) do
+    if call.text == "→" and call.x == 1042 and call.y == 2052 then found = true end
+  end
+  assertTrue(found, "door arrow fallback text should render at the converted screen coordinates")
+end
+
+local function testChoiceMarkerConvertsWorldToScreenWhenAvailable()
+  local rendered = {}
+  local isaac = {
+    RenderScaledText = function(text, x, y, ...) rendered[#rendered + 1] = { text = text, x = x, y = y } end,
+    WorldToScreen = function(vector) return { X = vector.x + 500, Y = vector.y + 700 } end
+  }
+  _G.Vector = function(x, y) return { x = x, y = y } end
+  local ui = UI.new({
+    isaac = isaac,
+    getSelectedGoal = function() return { id = "boss.mega_satan", name = "Mega Satan" } end,
+    state = {
+      bindings = {}, browser = {}, hud = { visible = true }, pinned = false, decision = { autoCompare = true }
+    },
+    entries = entries()
+  })
+  ui:render({ currentRoomClear = true }, {
+    status = "ok",
+    steps = { "Explore" },
+    decision = { primary = { action = "take", name = "Relic", position = { x = 320, y = 280 }, reasonCodes = {}, warnings = {} } }
+  })
+  _G.Vector = nil
+  local found = false
+  for _, call in ipairs(rendered) do
+    if call.text == "TAKE" and call.x == 320 - 12 + 500 and call.y == 280 + 700 - 24 then found = true end
+  end
+  assertTrue(found, "choice marker fallback text should render at the converted screen coordinates")
+end
+
+local function testMarkersFallBackToRawCoordinatesWithoutWorldToScreen()
+  local rendered = {}
+  local isaac = {
+    RenderScaledText = function(text, x, y, ...) rendered[#rendered + 1] = { text = text, x = x, y = y } end
+  }
+  local ui = UI.new({
+    isaac = isaac,
+    game = {
+      GetRoom = function()
+        return { GetDoorSlotPosition = function(_, slot) return { X = 50, Y = 60 } end }
+      end
+    },
+    getSelectedGoal = function() return { id = "boss.mega_satan", name = "Mega Satan" } end,
+    state = {
+      bindings = {}, browser = {}, hud = { visible = true }, pinned = false, decision = {}
+    },
+    entries = entries()
+  })
+  ui:render({ currentRoomClear = true }, { status = "ok", steps = { "Explore" }, nextDoorSlot = 2 })
+  local found = false
+  for _, call in ipairs(rendered) do
+    if call.text == "→" and call.x == 42 and call.y == 52 then found = true end
+  end
+  assertTrue(found, "door arrow should fall back to raw world coordinates when WorldToScreen is unavailable")
+end
+
+local tests = { testBuildsLiveCategoryCounts, testKeepsSelectedRowInPageWindow, testAdvancesPastInclusivePageEndpoint, testKeepsFinalSelectionInPersistedPageWindow, testResolvesSortedGoalDetails, testPreservesReadablePrerequisiteDetails, testFiltersCatalogStatusWhileShowingCurrentRunStatus, testExposesCategoryAndRowContract, testClampsOneBasedScrollForEmptyAndShortCategories, testShouldersChangeCategories, testControllerSelectsAbsoluteGoalAfterScrolling, testDpadMovesBetweenCategoryAndGoalPanes, testSearchPreservesSpacesAndPunctuation, testActionControllerNavigatesWithoutControllerTable, testActionConfirmWinsOverOpenBrowserBinding, testSearchEditResetsSelectionBeforeConfirmingNarrowedResult, testEmptyConfirmDoesNotCloseBrowser, testBrowserModelUsesLiveSnapshotWithoutMutatingFilters, testRenderTextUsesScaledTextArgumentOrder, testHudRendersSelectedGoalNameInsteadOfInternalId, testHudUsesReadableFallbackWhenSelectedGoalIsMissing, testHeldDetailBindingExpandsWithoutToggling, testDoorMarkerConvertsWorldToScreenWhenAvailable, testChoiceMarkerConvertsWorldToScreenWhenAvailable, testMarkersFallBackToRawCoordinatesWithoutWorldToScreen }
 for index, test in ipairs(tests) do
   test()
   print("navigation ok " .. index)
