@@ -1,0 +1,68 @@
+name: Compatibility pack or item model
+description: Propose or report a compatibility pack, item model, or character profile
+title: "[Compatibility]: "
+labels:
+  - compatibility
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for compatibility packs, item models, and character profiles. Do not include hidden or unreleased information.
+  - type: dropdown
+    id: content-type
+    attributes:
+      label: Content type
+      options:
+        - Compatibility pack
+        - Item model
+        - Character profile
+    validations:
+      required: true
+  - type: input
+    id: content-id
+    attributes:
+      label: Content ID(s)
+      description: Provide stable item, character, pack, or mod identifiers.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Content and mod version
+      description: Include the content version and the mod/dependency versions tested.
+    validations:
+      required: true
+  - type: textarea
+    id: model-details
+    attributes:
+      label: Model or compatibility details
+      description: Describe model paths, sprites, rules, mappings, exclusions, and expected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: tests
+    attributes:
+      label: Tests performed
+      description: List game modes, seeds, rooms, saves, and dependency combinations you tested.
+    validations:
+      required: true
+  - type: textarea
+    id: fair-play
+    attributes:
+      label: Fair-play considerations
+      description: Explain any progression, scoring, unlock, multiplayer, or gameplay impact.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Confirmation checklist
+      options:
+        - label: I verified the content IDs and version information.
+          required: true
+        - label: I tested the proposed or reported behavior in-game.
+          required: true
+        - label: This submission contains no hidden, unreleased, or spoiler-sensitive information.
+          required: true
+        - label: I searched existing issues and found no duplicate.
+          required: true

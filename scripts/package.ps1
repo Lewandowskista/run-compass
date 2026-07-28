@@ -4,7 +4,8 @@ param(
 
 $sourceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $resolvedOutput = [System.IO.Path]::GetFullPath($OutputPath)
-if ($resolvedOutput -eq [System.IO.Path]::GetFullPath($sourceRoot)) { throw "Refusing to package over the source tree" }
+$sourceFull = [System.IO.Path]::GetFullPath($sourceRoot).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+if ($resolvedOutput -eq $sourceFull -or $resolvedOutput.StartsWith($sourceFull + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) { throw "Refusing to package inside the source tree" }
 if (Test-Path -LiteralPath $resolvedOutput) { Remove-Item -LiteralPath $resolvedOutput -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $resolvedOutput | Out-Null
 Copy-Item -LiteralPath (Join-Path $sourceRoot 'main.lua') -Destination $resolvedOutput -Force

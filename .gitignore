@@ -1,8 +1,11 @@
 .worktrees/
 .tools/
+.superpowers/
 dist/
 build/
 deploy/
+staging/
+package-output/
 *.log
 *.tmp
 node_modules/

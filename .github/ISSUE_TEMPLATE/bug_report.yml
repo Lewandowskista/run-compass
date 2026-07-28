@@ -1,0 +1,82 @@
+name: Bug report
+description: Report a runtime error or other reproducible problem
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve the mod. Please remove personal information from logs before posting.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the runtime error or unexpected behavior and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest set of steps, room/seed, save, or content combination that reproduces the issue.
+      placeholder: |
+        1. Start a run as ...
+        2. Pick up ...
+        3. Enter ...
+    validations:
+      required: true
+  - type: input
+    id: game-version
+    attributes:
+      label: Game version
+      placeholder: e.g. Repentance 1.7.9b
+    validations:
+      required: true
+  - type: input
+    id: repentogon-version
+    attributes:
+      label: Repentogon version
+      placeholder: e.g. 1.0.0
+    validations:
+      required: true
+  - type: input
+    id: mcm-version
+    attributes:
+      label: Mod Config Menu (MCM) version
+      placeholder: Include the version or “not installed”.
+    validations:
+      required: true
+  - type: input
+    id: eid-version
+    attributes:
+      label: EID version
+      placeholder: Include the version or “not installed”.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and screenshots
+      description: Attach relevant logs, stack traces, and screenshots. Redact personal information.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: fair-play
+    attributes:
+      label: Fair-play impact
+      description: Explain whether this affects progression, unlocks, scoring, multiplayer parity, or other fair-play concerns.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and found no duplicate.
+          required: true
+        - label: I tested with the latest available mod and dependency versions.
+          required: true
+        - label: I removed personal information from logs and attachments.
+          required: true
