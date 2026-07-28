@@ -307,6 +307,33 @@ local function testRenderTextUsesScaledTextArgumentOrder()
   assertEqual(scaled[1][7], 0.78, "scaled text should receive the title green color after scales")
 end
 
+local function testRenderTextNeverDownscalesBitmapFont()
+  local scaled = {}
+  local ui = UI.new({
+    isaac = {
+      RenderText = function() end,
+      RenderScaledText = function(...) scaled[#scaled + 1] = { ... } end
+    },
+    getSelectedGoal = function() return { id = "boss.mega_satan", name = "Mega Satan" } end,
+    state = {
+      selectedGoalId = "boss.mega_satan",
+      bindings = { keyboardGoal = 901, keyboardToggle = 902, controllerGoal = 903, controllerToggle = 904 },
+      browser = { category = "boss_routes", kind = "all", status = "all", alphabet = "all", character = "all", unlockMethod = "all", completionMark = "all" },
+      hud = { visible = true, scale = 1 }, pinned = false
+    },
+    entries = entries()
+  })
+  ui.open = true
+  ui:render({}, nil)
+  ui.open = false
+  ui:render({ currentRoomClear = true }, { status = "ok", steps = { "Explore" } })
+  assertTrue(#scaled > 0, "rendering should produce scaled text calls")
+  for index, call in ipairs(scaled) do
+    assertTrue(call[4] >= 1 and call[5] >= 1,
+      "call " .. index .. " (" .. tostring(call[1]) .. ") must not downscale the bitmap font (got " .. tostring(call[4]) .. ")")
+  end
+end
+
 local function testHudRendersSelectedGoalNameInsteadOfInternalId()
   local scaled = {}
   local ui = UI.new({
@@ -452,7 +479,7 @@ local function testMarkersFallBackToRawCoordinatesWithoutWorldToScreen()
   assertTrue(found, "door arrow should fall back to raw world coordinates when WorldToScreen is unavailable")
 end
 
-local tests = { testBuildsLiveCategoryCounts, testKeepsSelectedRowInPageWindow, testAdvancesPastInclusivePageEndpoint, testKeepsFinalSelectionInPersistedPageWindow, testResolvesSortedGoalDetails, testPreservesReadablePrerequisiteDetails, testFiltersCatalogStatusWhileShowingCurrentRunStatus, testExposesCategoryAndRowContract, testClampsOneBasedScrollForEmptyAndShortCategories, testShouldersChangeCategories, testControllerSelectsAbsoluteGoalAfterScrolling, testDpadMovesBetweenCategoryAndGoalPanes, testSearchPreservesSpacesAndPunctuation, testActionControllerNavigatesWithoutControllerTable, testActionConfirmWinsOverOpenBrowserBinding, testSearchEditResetsSelectionBeforeConfirmingNarrowedResult, testEmptyConfirmDoesNotCloseBrowser, testBrowserModelUsesLiveSnapshotWithoutMutatingFilters, testRenderTextUsesScaledTextArgumentOrder, testHudRendersSelectedGoalNameInsteadOfInternalId, testHudUsesReadableFallbackWhenSelectedGoalIsMissing, testHeldDetailBindingExpandsWithoutToggling, testDoorMarkerConvertsWorldToScreenWhenAvailable, testChoiceMarkerConvertsWorldToScreenWhenAvailable, testMarkersFallBackToRawCoordinatesWithoutWorldToScreen }
+local tests = { testBuildsLiveCategoryCounts, testKeepsSelectedRowInPageWindow, testAdvancesPastInclusivePageEndpoint, testKeepsFinalSelectionInPersistedPageWindow, testResolvesSortedGoalDetails, testPreservesReadablePrerequisiteDetails, testFiltersCatalogStatusWhileShowingCurrentRunStatus, testExposesCategoryAndRowContract, testClampsOneBasedScrollForEmptyAndShortCategories, testShouldersChangeCategories, testControllerSelectsAbsoluteGoalAfterScrolling, testDpadMovesBetweenCategoryAndGoalPanes, testSearchPreservesSpacesAndPunctuation, testActionControllerNavigatesWithoutControllerTable, testActionConfirmWinsOverOpenBrowserBinding, testSearchEditResetsSelectionBeforeConfirmingNarrowedResult, testEmptyConfirmDoesNotCloseBrowser, testBrowserModelUsesLiveSnapshotWithoutMutatingFilters, testRenderTextUsesScaledTextArgumentOrder, testRenderTextNeverDownscalesBitmapFont, testHudRendersSelectedGoalNameInsteadOfInternalId, testHudUsesReadableFallbackWhenSelectedGoalIsMissing, testHeldDetailBindingExpandsWithoutToggling, testDoorMarkerConvertsWorldToScreenWhenAvailable, testChoiceMarkerConvertsWorldToScreenWhenAvailable, testMarkersFallBackToRawCoordinatesWithoutWorldToScreen }
 for index, test in ipairs(tests) do
   test()
   print("navigation ok " .. index)

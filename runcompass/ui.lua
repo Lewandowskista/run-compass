@@ -18,8 +18,10 @@ end
 
 local function renderText(isaac, text, x, y, scale, color)
   color = color or { 1, 1, 1, 1 }
+  -- Isaac's bitmap font drops glyph pixels below 1x; only upscaling is legible
+  scale = math.max(1, scale or 1)
   if type(isaac.RenderScaledText) == "function" then
-    isaac.RenderScaledText(text or "", x, y, scale or 1, scale or 1, color[1] or 1, color[2] or 1, color[3] or 1, color[4] or 1)
+    isaac.RenderScaledText(text or "", x, y, scale, scale, color[1] or 1, color[2] or 1, color[3] or 1, color[4] or 1)
   elseif type(isaac.RenderText) == "function" then
     isaac.RenderText(text or "", x, y, color[1] or 1, color[2] or 1, color[3] or 1, color[4] or 1)
   end
