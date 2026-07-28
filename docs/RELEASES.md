@@ -19,7 +19,7 @@ Stage a clean Workshop candidate:
 ./scripts/package.ps1 -OutputPath C:\tmp\run-compass-public-package
 ```
 
-The script removes stale output, refuses to package over the source tree, and copies only runtime files: `main.lua`, `metadata.xml`, `README.md`, `runcompass/`, optional `strings/`, and runtime `gfx/`. Tests, docs, plans, and local tooling are excluded.
+The script removes stale output, refuses to package inside the source tree, and copies runtime files plus the five user-facing guides and Observatory images used by the README. Tests, plans, node modules, and local tooling are excluded.
 
 Before promotion, verify:
 

@@ -7,7 +7,7 @@
 3. Enable the mod in the in-game Mods menu and start a solo Normal or Hard run.
 4. Open Mod Config Menu → **Run Compass** to set goal-browser and guidance bindings, HUD placement, and explanation preferences.
 
-The package is self-contained: `main.lua`, `metadata.xml`, `runcompass/`, and runtime `gfx/` (plus `strings/` when present). Do not copy `tests/`, `docs/`, or development plans into the game mod folder.
+The package is self-contained: `main.lua`, `metadata.xml`, `runcompass/`, runtime `gfx/`, the five user-facing guides, and Observatory images (plus `strings/` when present). Do not copy tests, plans, or development tooling into the game mod folder.
 
 ## Local checkout
 

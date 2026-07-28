@@ -1,9 +1,10 @@
 # Run Compass [REP+]
 
 ![Run Compass Observatory](docs/images/run-compass-observatory-hero.png)
+<img src="docs/images/run-compass-observatory-mark.png" alt="Run Compass Observatory mark" width="96" align="right">
 
 [![Version 1.1.0](https://img.shields.io/badge/version-1.1.0-8be04e?style=flat-square&labelColor=101b33)](metadata.xml)
-[![Tests](https://img.shields.io/badge/tests-fengari%20fixtures-8be04e?style=flat-square&labelColor=101b33)](package.json)
+[![Tests](https://img.shields.io/badge/tests-fengari%20fixtures-8be04e?style=flat-square&labelColor=101b33)](docs/RELEASES.md)
 [![Fair play](https://img.shields.io/badge/fair--play-visible%20information-8be04e?style=flat-square&labelColor=101b33)](docs/FAIR_PLAY.md)
 
 Run Compass is an Observatory for **The Binding of Isaac: Repentance+**: a fair-play route and build guide for solo Normal and Hard runs. Pick a boss or vanilla unlock, then get a compact next-door and visible-choice recommendation as the floor reveals itself. It is a decision aid, not an oracle—there is no guaranteed optimal play.
@@ -78,7 +79,7 @@ npm.cmd test
 ./scripts/package.ps1 -OutputPath C:\tmp\run-compass-public-package
 ```
 
-The fixture, performance, and build-guide suites are described in [RELEASES.md](docs/RELEASES.md). Packaging copies only `main.lua`, `metadata.xml`, `README.md`, `runcompass/`, optional `strings/`, and runtime `gfx/`; tests and development plans stay out of Workshop output. Before promotion, perform a clean install/save-continuation check and the documented mixed-character soak.
+The fixture, performance, and build-guide suites are described in [RELEASES.md](docs/RELEASES.md). Packaging copies runtime files plus the five user-facing guides and Observatory images used by this README; tests, plans, and development tooling stay out of Workshop output. Before promotion, perform a clean install/save-continuation check and the documented mixed-character soak.
 
 ## Scope
 
