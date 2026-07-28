@@ -12,6 +12,15 @@ end
 
 local function values(container)
   local result = {}
+  local size = safe(nil, function() return container.Size end)
+  local getter = safe(nil, function() return container.Get end)
+  if type(size) == "number" and type(getter) == "function" then
+    for index = 0, size - 1 do
+      local value = safe(nil, function() return getter(container, index) end)
+      if value ~= nil then result[#result + 1] = value end
+    end
+    return result
+  end
   if type(container) == "table" then
     for _, value in pairs(container) do result[#result + 1] = value end
     return result
@@ -359,8 +368,11 @@ function GameAdapter:build()
     self.observationRooms = {}
     self.observationChoices = {}
   end
-  local currentIndex = safe(0, function() return level:GetCurrentRoomIndex() end)
-  local currentRoom = safe(nil, function() return level:GetCurrentRoom() end)
+  local currentDescriptor = safe(nil, function() return level:GetCurrentRoomDesc() end)
+  local currentIndex = currentDescriptor and currentDescriptor.SafeGridIndex
+  if currentIndex == nil or currentIndex < 0 then currentIndex = safe(0, function() return level:GetCurrentRoomIndex() end) end
+  local currentRoom = safe(nil, function() return game:GetRoom() end)
+  if not currentRoom then currentRoom = safe(nil, function() return level:GetCurrentRoom() end) end
   local curses = safe(0, function() return level:GetCurses() end)
   local levelCurse = env.levelCurse or rawget(_G, "LevelCurse") or {}
   local visibility = {

@@ -317,6 +317,42 @@ local function testRoomGraphUsesSafeGridIndexAsCanonicalId()
   assertTrue(found, "room IDs must match Level current/door grid indices")
 end
 
+local function testGameAdapterReadsLiveRoomDescriptorListApi()
+  local descriptors = {
+    { ListIndex = 0, GridIndex = 100, SafeGridIndex = 100, VisitedCount = 1, DisplayFlags = 1, Data = { Type = 1 } },
+    { ListIndex = 1, GridIndex = 101, SafeGridIndex = 101, VisitedCount = 0, DisplayFlags = 1, Data = { Type = 1 } }
+  }
+  local roomList = setmetatable({}, {
+    __index = function(_, key)
+      if key == "Size" then return #descriptors end
+      if key == "Get" then return function(_, index) return descriptors[index + 1] end end
+    end
+  })
+  local currentRoom = {
+    IsClear = function() return true end,
+    GetFrameCount = function() return 12 end
+  }
+  local level = {
+    GetRooms = function() return roomList end,
+    GetCurrentRoomIndex = function() return 101 end,
+    GetCurrentRoomDesc = function() return descriptors[1] end,
+    GetCurses = function() return 0 end
+  }
+  local game = {
+    GetLevel = function() return level end,
+    GetRoom = function() return currentRoom end,
+    GetNumPlayers = function() return 0 end,
+    IsGreedMode = function() return false end,
+    GetSeeds = function() return nil end
+  }
+  local snapshot = GameAdapter.new({ game = game, roomType = {} }):build()
+  assertEqual(#snapshot.rooms, 2, "RoomDescriptorList must be enumerated through Size and Get")
+  assertEqual(snapshot.currentRoom, 100, "current room must use the descriptor SafeGridIndex")
+  assertEqual(snapshot.currentRoomClear, true, "current room state must come from Game:GetRoom")
+  local recommendation = Planner.plan(snapshot, { id = "boss.delirium", kind = "boss", destinationRooms = { 101 } })
+  assertTrue(recommendation.status ~= "waiting", "a complete live room graph must not stay in the loading state")
+end
+
 local function testRuntimeReportsRepeatedFailureOnce()
   local messages = {}
   local runtime = Runtime.new({
@@ -647,6 +683,7 @@ local tests = {
   testPlannerWaitsWhenCurrentRoomIsMissing,
   testPlannerDoesNotFollowInvalidDoorTarget,
   testRoomGraphUsesSafeGridIndexAsCanonicalId,
+  testGameAdapterReadsLiveRoomDescriptorListApi,
   testRuntimeReportsRepeatedFailureOnce,
   testRuntimeDefersRenderUntilRenderCall,
   testFairPlaySnapshotRemovesSecretAndInvalidTopology,
