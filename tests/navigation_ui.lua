@@ -131,6 +131,45 @@ local function uiFixture()
   }
 end
 
+local function actionFixture()
+  local rawTriggered = nil
+  local actionTriggered = nil
+  local selected = nil
+  local buttonAction = {
+    ACTION_MENUUP = 1, ACTION_MENUDOWN = 2, ACTION_MENULEFT = 3, ACTION_MENURIGHT = 4,
+    ACTION_MENULB = 5, ACTION_MENURB = 6, ACTION_MENUCONFIRM = 7, ACTION_MENUBACK = 8,
+    ACTION_MENUTAB = 9, ACTION_MENUEX = 10
+  }
+  local ui = UI.new({
+    input = {
+      IsButtonTriggered = function(code) return code == rawTriggered end,
+      IsActionTriggered = function(action) return action == actionTriggered end
+    },
+    keyboard = {
+      KEY_UP = 101, KEY_DOWN = 102, KEY_LEFT = 103, KEY_RIGHT = 104,
+      KEY_ENTER = 105, KEY_ESCAPE = 106, KEY_TAB = 107, KEY_S = 108,
+      KEY_L = 109, KEY_BACKSPACE = 110, KEY_A = 200, KEY_Z = 225
+    },
+    buttonAction = buttonAction,
+    state = {
+      bindings = { keyboardGoal = 901, keyboardToggle = 902, controllerGoal = 10, controllerToggle = 904 },
+      browser = { category = "boss_routes", kind = "all", status = "all", alphabet = "all", character = "all", unlockMethod = "all", completionMark = "all" },
+      hud = { visible = true },
+      pinned = false
+    },
+    entries = entries(),
+    onGoalSelected = function(goal) selected = goal end
+  })
+  ui.open = true
+  return {
+    ui = ui,
+    buttonAction = buttonAction,
+    pressAction = function(action) actionTriggered = action; ui:input(); actionTriggered = nil end,
+    pressRawAndAction = function(raw, action) rawTriggered = raw; actionTriggered = action; ui:input(); rawTriggered = nil; actionTriggered = nil end,
+    selected = function() return selected end
+  }
+end
+
 local function testShouldersChangeCategories()
   local fixture = uiFixture()
   fixture.press(fixture.controller.RIGHT_SHOULDER)
@@ -168,9 +207,95 @@ local function testSearchPreservesSpacesAndPunctuation()
   assertEqual(fixture.ui.query, "King '", "search should preserve spaces and apostrophes")
 end
 
-local tests = { testBuildsLiveCategoryCounts, testKeepsSelectedRowInPageWindow, testAdvancesPastInclusivePageEndpoint, testKeepsFinalSelectionInPersistedPageWindow, testResolvesSortedGoalDetails, testFiltersCatalogStatusWhileShowingCurrentRunStatus, testExposesCategoryAndRowContract, testClampsOneBasedScrollForEmptyAndShortCategories, testShouldersChangeCategories, testControllerSelectsAbsoluteGoalAfterScrolling, testDpadMovesBetweenCategoryAndGoalPanes, testSearchPreservesSpacesAndPunctuation }
+local function testActionControllerNavigatesWithoutControllerTable()
+  local fixture = actionFixture()
+  fixture.pressAction(fixture.buttonAction.ACTION_MENURB)
+  assertEqual(fixture.ui.browserState.category, "item_unlocks", "action right shoulder should advance the category without Controller")
+  fixture.pressAction(fixture.buttonAction.ACTION_MENULEFT)
+  assertEqual(fixture.ui.browserState.focusedPane, "categories", "action left should focus categories without Controller")
+  fixture.pressAction(fixture.buttonAction.ACTION_MENUDOWN)
+  assertEqual(fixture.ui.browserState.category, "completion_marks", "action down should change categories without Controller")
+  fixture.pressAction(fixture.buttonAction.ACTION_MENURIGHT)
+  assertEqual(fixture.ui.browserState.focusedPane, "goals", "action right should return focus to goals without Controller")
+end
+
+local function testActionConfirmWinsOverOpenBrowserBinding()
+  local fixture = actionFixture()
+  fixture.pressRawAndAction(10, fixture.buttonAction.ACTION_MENUCONFIRM)
+  assertTrue(fixture.selected() ~= nil, "action confirm should select instead of toggling the open browser")
+  assertEqual(fixture.selected().name, "Boss 01", "action confirm should select the highlighted goal")
+  assertEqual(fixture.ui.open, false, "a real selection should close the browser")
+end
+
+local function testSearchEditResetsSelectionBeforeConfirmingNarrowedResult()
+  local fixture = uiFixture()
+  fixture.ui.browserState.selectedIndex = 14
+  fixture.ui.browserState.scrollOffset = 5
+  fixture.ui.query = "Boss 14x"
+  fixture.press(fixture.keyboard.KEY_BACKSPACE)
+  assertEqual(fixture.ui.browserState.selectedIndex, 1, "search edits should reset the selected result")
+  assertEqual(fixture.ui.browserState.scrollOffset, 1, "search edits should reset the visible page")
+  fixture.press(fixture.keyboard.KEY_ENTER)
+  assertTrue(fixture.selected() ~= nil, "confirm should select the narrowed result")
+  assertEqual(fixture.selected().name, "Boss 14", "confirm should use the model's clamped selected index")
+end
+
+local function testEmptyConfirmDoesNotCloseBrowser()
+  local fixture = uiFixture()
+  fixture.ui.query = "No Such Goal"
+  fixture.press(fixture.keyboard.KEY_ENTER)
+  assertEqual(fixture.selected(), nil, "empty results should not invoke the selection callback")
+  assertEqual(fixture.ui.open, true, "empty results should leave the browser open")
+end
+
+local function testBrowserModelUsesLiveSnapshotWithoutMutatingFilters()
+  local snapshotCalls = 0
+  local ui = UI.new({
+    snapshot = function()
+      snapshotCalls = snapshotCalls + 1
+      return { player = { characterToken = "isaac" } }
+    end,
+    state = {
+      bindings = { keyboardGoal = 901, keyboardToggle = 902, controllerGoal = 903, controllerToggle = 904 },
+      browser = { category = "boss_routes", kind = "all", status = "all", alphabet = "all", character = "all", unlockMethod = "all", completionMark = "all" },
+      hud = { visible = true }, pinned = false
+    },
+    entries = { { id = "boss.live", name = "Live Boss", kind = "boss", status = "routable", requiredCharacterToken = "isaac" } }
+  })
+  ui.query = "Live"
+  ui.browserState.filters.query = "Saved"
+  local model = ui:browserModel()
+  assertEqual(snapshotCalls, 1, "browser model should call the supplied live snapshot")
+  assertEqual(model.details.currentRunStatus, "routable", "details should resolve against the live snapshot")
+  assertEqual(ui.browserState.filters.query, "Saved", "building a model should not mutate saved browser filters")
+end
+
+local function testRenderTextUsesScaledTextArgumentOrder()
+  local scaled = {}
+  local ui = UI.new({
+    isaac = {
+      RenderText = function() end,
+      RenderScaledText = function(...) scaled[#scaled + 1] = { ... } end
+    },
+    state = {
+      bindings = { keyboardGoal = 901, keyboardToggle = 902, controllerGoal = 903, controllerToggle = 904 },
+      browser = { category = "boss_routes", kind = "all", status = "all", alphabet = "all", character = "all", unlockMethod = "all", completionMark = "all" },
+      hud = { visible = true }, pinned = false
+    },
+    entries = entries()
+  })
+  ui.open = true
+  ui:render({}, nil)
+  assertTrue(#scaled > 0, "browser rendering should use RenderScaledText when available")
+  assertEqual(scaled[1][1], "Run Compass", "scaled text should receive the text first")
+  assertEqual(scaled[1][4], 1, "scaled text should receive scale X before colors")
+  assertEqual(scaled[1][5], 1, "scaled text should receive scale Y before colors")
+  assertEqual(scaled[1][7], 0.78, "scaled text should receive the title green color after scales")
+end
+
+local tests = { testBuildsLiveCategoryCounts, testKeepsSelectedRowInPageWindow, testAdvancesPastInclusivePageEndpoint, testKeepsFinalSelectionInPersistedPageWindow, testResolvesSortedGoalDetails, testFiltersCatalogStatusWhileShowingCurrentRunStatus, testExposesCategoryAndRowContract, testClampsOneBasedScrollForEmptyAndShortCategories, testShouldersChangeCategories, testControllerSelectsAbsoluteGoalAfterScrolling, testDpadMovesBetweenCategoryAndGoalPanes, testSearchPreservesSpacesAndPunctuation, testActionControllerNavigatesWithoutControllerTable, testActionConfirmWinsOverOpenBrowserBinding, testSearchEditResetsSelectionBeforeConfirmingNarrowedResult, testEmptyConfirmDoesNotCloseBrowser, testBrowserModelUsesLiveSnapshotWithoutMutatingFilters, testRenderTextUsesScaledTextArgumentOrder }
 for index, test in ipairs(tests) do
   test()
   print("navigation ok " .. index)
 end
-print("12 navigation UI tests passed")
+print("18 navigation UI tests passed")

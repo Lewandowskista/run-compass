@@ -7,7 +7,11 @@ UI.__index = UI
 
 local function renderText(isaac, text, x, y, scale, color)
   color = color or { 1, 1, 1, 1 }
-  isaac.RenderText(text or "", x, y, scale or 1, color[1] or 1, color[2] or 1, color[3] or 1, color[4] or 1)
+  if type(isaac.RenderScaledText) == "function" then
+    isaac.RenderScaledText(text or "", x, y, scale or 1, scale or 1, color[1] or 1, color[2] or 1, color[3] or 1, color[4] or 1)
+  elseif type(isaac.RenderText) == "function" then
+    isaac.RenderText(text or "", x, y, color[1] or 1, color[2] or 1, color[3] or 1, color[4] or 1)
+  end
 end
 
 local function cycle(values, value)
@@ -45,14 +49,18 @@ function UI.new(env)
 end
 
 function UI:browserModel()
-  self.browserState.filters.query = self.query
   local snapshotSource = self.env.getSnapshot or self.env.snapshot
   local snapshot = type(snapshotSource) == "table" and snapshotSource or {}
   if type(snapshotSource) == "function" then
     local ok, result = pcall(snapshotSource)
     if ok and type(result) == "table" then snapshot = result end
   end
-  return BrowserModel.build(self.env.entries, snapshot, self.browserState, 10)
+  local state = {}
+  for key, value in pairs(self.browserState) do state[key] = value end
+  state.filters = {}
+  for key, value in pairs(self.browserState.filters) do state.filters[key] = value end
+  state.filters.query = self.query
+  return BrowserModel.build(self.env.entries, snapshot, state, 10)
 end
 
 function UI:resetBrowserPosition()
@@ -88,22 +96,29 @@ function UI:togglePinned()
 end
 
 function UI:selectGoal(model)
-  local selected = model.goals[self.browserState.selectedIndex]
+  local selected = model and model.goals[model.selectedIndex]
+  if not selected then return end
   if selected and self.env.onGoalSelected then self.env.onGoalSelected(selected) end
   self.open = false
 end
 
 function UI:input()
-  local input, keyboard, controller = self.env.input, self.env.keyboard, self.env.controller
+  local input, keyboard, controller, buttonAction = self.env.input, self.env.keyboard, self.env.controller, self.env.buttonAction
   if not input then return end
   local state = self.env.state
   local pressed = function(code) return code ~= nil and input.IsButtonTriggered and input.IsButtonTriggered(code, 0) end
+  local actionPressed = function(name)
+    local action = buttonAction and buttonAction[name]
+    return action ~= nil and input.IsActionTriggered and input.IsActionTriggered(action, 0)
+  end
 
   if pressed(state.bindings.keyboardGoal) then self:toggleBrowser(); return end
   if pressed(state.bindings.keyboardToggle) then self:togglePinned(); return end
-  if pressed(state.bindings.controllerGoal) then self:toggleBrowser(); return end
-  if pressed(state.bindings.controllerToggle) then self:togglePinned(); return end
-  if not self.open or not input.IsButtonTriggered then return end
+  if not self.open then
+    if pressed(state.bindings.controllerGoal) then self:toggleBrowser(); return end
+    if pressed(state.bindings.controllerToggle) then self:togglePinned(); return end
+    return
+  end
 
   local function moveGoal(delta)
     local model = self:browserModel()
@@ -144,6 +159,21 @@ function UI:input()
     self:resetBrowserPosition()
   end
 
+  if actionPressed("ACTION_MENULB") or actionPressed("ACTION_MENULT") then self:changeCategory(-1); return end
+  if actionPressed("ACTION_MENURB") or actionPressed("ACTION_MENURT") then self:changeCategory(1); return end
+  if actionPressed("ACTION_MENUUP") then moveVertical(-1); return end
+  if actionPressed("ACTION_MENUDOWN") then moveVertical(1); return end
+  if actionPressed("ACTION_MENULEFT") then movePane(-1); return end
+  if actionPressed("ACTION_MENURIGHT") then movePane(1); return end
+  if actionPressed("ACTION_MENUTAB") then changeFilter("kind", { "all", "boss", "collectible" }); return end
+  if actionPressed("ACTION_MENUEX") then changeFilter("status", { "all", "locked", "already_unlocked", "instructional_only", "catalog_update_required" }); return end
+  local model = self:browserModel()
+  if actionPressed("ACTION_MENUCONFIRM") then self:selectGoal(model); return end
+  if actionPressed("ACTION_MENUBACK") then self.open = false; return end
+
+  if pressed(state.bindings.controllerGoal) then self:toggleBrowser(); return end
+  if pressed(state.bindings.controllerToggle) then self:togglePinned(); return end
+
   if controller and pressed(controller.LEFT_SHOULDER) then self:changeCategory(-1); return end
   if controller and pressed(controller.RIGHT_SHOULDER) then self:changeCategory(1); return end
   if keyboard and pressed(keyboard.KEY_UP) then moveVertical(-1); return end
@@ -165,16 +195,16 @@ function UI:input()
   if controller and pressed(controller.BUTTON_X) then changeFilter("kind", { "all", "boss", "collectible" }); return end
   if controller and pressed(controller.BUTTON_Y) then changeFilter("status", { "all", "locked", "already_unlocked", "instructional_only", "catalog_update_required" }); return end
 
-  local model = self:browserModel()
   if keyboard and pressed(keyboard.KEY_ENTER) then self:selectGoal(model); return end
   if controller and pressed(controller.BUTTON_A) then self:selectGoal(model); return end
   if keyboard and pressed(keyboard.KEY_ESCAPE) then self.open = false; return end
   if controller and pressed(controller.BUTTON_B) then self.open = false; return end
-  if keyboard and pressed(keyboard.KEY_BACKSPACE) then self.query = string.sub(self.query, 1, -2); return end
+  if keyboard and pressed(keyboard.KEY_BACKSPACE) then self.query = string.sub(self.query, 1, -2); self:resetBrowserPosition(); return end
   if keyboard and keyboard.KEY_A ~= nil and keyboard.KEY_Z ~= nil then
     for code = keyboard.KEY_A, keyboard.KEY_Z do
       if pressed(code) then
         self.query = self.query .. string.char(string.byte("A") + code - keyboard.KEY_A)
+        self:resetBrowserPosition()
         return
       end
     end
@@ -185,7 +215,7 @@ function UI:input()
       { "KEY_COMMA", "," }, { "KEY_PERIOD", "." }, { "KEY_SLASH", "/" }
     }
     for _, entry in ipairs(punctuation) do
-      if pressed(keyboard[entry[1]]) then self.query = self.query .. entry[2]; return end
+      if pressed(keyboard[entry[1]]) then self.query = self.query .. entry[2]; self:resetBrowserPosition(); return end
     end
   end
 end
@@ -234,7 +264,7 @@ end
 
 function UI:render(snapshot, recommendation)
   local isaac = self.env.isaac
-  if not isaac or type(isaac.RenderText) ~= "function" then return end
+  if not isaac or (type(isaac.RenderText) ~= "function" and type(isaac.RenderScaledText) ~= "function") then return end
   if self.open then
     self:renderBrowser()
     return
