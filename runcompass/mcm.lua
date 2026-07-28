@@ -4,7 +4,7 @@ function MCM.register(state, onChanged)
   local menu = rawget(_G, "ModConfigMenu") or rawget(_G, "MCM")
   if type(menu) ~= "table" or type(menu.AddSetting) ~= "function" then return false end
   local optionType = menu.OptionType or {}
-  local function setting(category, name, kind, display, current, change, info)
+  local function setting(category, name, kind, display, current, change, info, minimum, maximum, modifyBy)
     local config = {
       Type = optionType[kind],
       CurrentSetting = current,
@@ -12,7 +12,7 @@ function MCM.register(state, onChanged)
       OnChange = function(value) change(value); if onChanged then onChanged() end end,
       Info = info or {}
     }
-    if kind == "NUMBER" then config.Minimum = 0.5; config.Maximum = 2; config.ModifyBy = 0.1 end
+    if kind == "NUMBER" then config.Minimum = minimum or 0.5; config.Maximum = maximum or 2; config.ModifyBy = modifyBy or 0.1 end
     pcall(menu.AddSetting, "Run Compass", category, {
       Type = config.Type,
       CurrentSetting = config.CurrentSetting,
@@ -31,6 +31,9 @@ function MCM.register(state, onChanged)
   setting("HUD", "Enabled", "BOOLEAN", function() return "HUD: " .. (state.hud.visible and "On" or "Off") end, function() return state.hud.visible end, function(value) state.hud.visible = value end)
   setting("HUD", "Pinned", "BOOLEAN", function() return "Pinned: " .. (state.pinned and "On" or "Off") end, function() return state.pinned end, function(value) state.pinned = value end)
   setting("HUD", "Scale", "NUMBER", function() return "Scale: " .. tostring(state.hud.scale) end, function() return state.hud.scale end, function(value) state.hud.scale = value end)
+  setting("HUD", "X position", "NUMBER", function() return "X: " .. tostring(state.hud.x) end, function() return state.hud.x end, function(value) state.hud.x = math.max(-400, math.min(400, tonumber(value) or 0)) end, nil, -400, 400, 10)
+  setting("HUD", "Y position", "NUMBER", function() return "Y: " .. tostring(state.hud.y) end, function() return state.hud.y end, function(value) state.hud.y = math.max(-240, math.min(240, tonumber(value) or 0)) end, nil, -240, 240, 10)
+  setting("Diagnostics", "Developer diagnostics", "BOOLEAN", function() return "Diagnostics: " .. (state.diagnostics and "On" or "Off") end, function() return state.diagnostics end, function(value) state.diagnostics = value == true end)
   if type(menu.AddText) == "function" then
     pcall(menu.AddText, "Run Compass", "Info", function() return "Run Compass [REP+]" end)
     pcall(menu.AddText, "Run Compass", "Info", function() return "MCM config active; Repentogon enables enhanced progress tracking." end)

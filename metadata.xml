@@ -3,8 +3,8 @@
     <name>Run Compass [REP+]</name>
     <directory>run-compass</directory>
     <description>Fair-play dynamic route guidance for solo Normal and Hard Repentance+ runs. Select a boss or collectible goal and get the next recommended door, resource-aware detours, and explanations. Requires Mod Config Menu. Repentogon enables exact persistent unlock/completion tracking.</description>
-    <version>0.1.0</version>
-    <visibility>Private</visibility>
+    <version>1.0.0</version>
+    <visibility>Public</visibility>
     <tag id="Lua"/>
     <tag id="Graphics"/>
     <tag id="Tweaks"/>

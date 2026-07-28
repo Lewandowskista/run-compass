@@ -19,9 +19,12 @@ function Capabilities.detect(repentogon, dependencies)
   local result = {
     tier = "base",
     mcm = dependencies.ModConfigMenu ~= nil,
+    persistentAchievements = false,
+    completionMarks = false,
     persistentProgress = false,
     preciseEvents = false,
-    repentogonVersion = nil
+    repentogonVersion = nil,
+    diagnostics = {}
   }
   if type(repentogon) == "table" and type(repentogon.Version) == "string" then
     result.repentogonVersion = repentogon.Version
@@ -32,9 +35,20 @@ function Capabilities.detect(repentogon, dependencies)
     end
     if compatible then
       result.tier = "enhanced"
-      result.persistentProgress = true
-      result.preciseEvents = true
+      local isaac = dependencies.isaac or rawget(_G, "Isaac") or {}
+      local game = dependencies.game or {}
+      local callbacks = dependencies.callbacks or rawget(_G, "ModCallbacks") or {}
+      result.persistentAchievements = type(isaac.GetPersistentGameData) == "function"
+      result.completionMarks = type(isaac.GetCompletionMarks) == "function"
+      result.preciseEvents = callbacks.MC_POST_ACHIEVEMENT_UNLOCK ~= nil and callbacks.MC_POST_COMPLETION_MARK_GET ~= nil
+      result.persistentProgress = result.persistentAchievements or result.completionMarks
+      if not result.persistentAchievements then result.diagnostics.persistentAchievements = "read API unavailable" end
+      if not result.completionMarks then result.diagnostics.completionMarks = "read API unavailable" end
+      if not result.preciseEvents then result.diagnostics.preciseEvents = "callback constants unavailable" end
+      result.diagnostics.achievementUnlocksDisallowed = type(game.AchievementUnlocksDisallowed) == "function" and "available" or "unavailable"
     end
+  else
+    result.diagnostics.repentogon = "missing or outdated"
   end
   return result
 end

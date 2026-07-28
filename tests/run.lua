@@ -13,6 +13,10 @@ local Goals = require("runcompass.goals")
 local Presentation = require("runcompass.presentation")
 local Rules = require("runcompass.rules")
 local GameAdapter = require("runcompass.game")
+local Runtime = require("runcompass.runtime")
+local Milestones = require("runcompass.milestones")
+local Search = require("runcompass.search")
+local Valuation = require("runcompass.valuation")
 
 local function assertEqual(actual, expected, message)
   if actual ~= expected then
@@ -114,7 +118,7 @@ end
 
 local function testSaveMigrationUsesSafeDefaults()
   local migrated = Save.migrate({ schemaVersion = 0, selectedGoalId = "boss.delirium" })
-  assertEqual(migrated.schemaVersion, 1, "save data should be migrated")
+  assertEqual(migrated.schemaVersion, 2, "save data should be migrated")
   assertEqual(migrated.pinned, false, "missing fields should use safe defaults")
 end
 
@@ -177,7 +181,7 @@ end
 local function testEventsNormalizeKnownCallbacks()
   local seen = {}
   local callbacks = Events.normalized({
-    onEvent = function(name) seen[#seen + 1] = name end
+    onEvent = function(_, name) seen[#seen + 1] = name end
   })
   callbacks.room()
   callbacks.pickup()
@@ -246,6 +250,294 @@ local function testBossRoomKindsUseBossIdEnum()
   assertEqual(adapter:roomKind(5, 0, room), "satan", "BossID should normalize regular boss rooms")
 end
 
+local function testCapabilityDetectionProbesEnhancedFeaturesIndividually()
+  local enhanced = Capabilities.detect({ Version = "1.1.2e", MeetsVersion = function() return true end }, {
+    ModConfigMenu = true,
+    isaac = { GetPersistentGameData = function() end, GetCompletionMarks = function() end },
+    callbacks = { MC_POST_ACHIEVEMENT_UNLOCK = 1, MC_POST_COMPLETION_MARK_GET = 2 },
+    game = { AchievementUnlocksDisallowed = function() end }
+  })
+  assertTrue(enhanced.persistentAchievements, "enhanced capabilities should expose persistent achievement reads")
+  assertTrue(enhanced.completionMarks, "enhanced capabilities should expose completion mark reads")
+  assertTrue(enhanced.preciseEvents, "enhanced capabilities should expose precise progress callbacks")
+end
+
+local function testCatalogClassifiesKnownUnmappedAchievementsInstructionally()
+  local catalog = Catalog.new({ { id = 4, name = "Known Instruction", achievementId = 100 } }, {}, { knownAchievementMax = 637 })
+  assertEqual(catalog:get(4).status, "instructional_only", "known but unmapped achievements should be instructional")
+  assertEqual(catalog:get(4).classification, "instructional_only", "catalog should expose the explicit classification")
+end
+
+local function testNormalizedCallbacksInvalidateRealController()
+  local controller = Controller.new({ plan = function() return { status = "ok" } end })
+  controller.dirty = false
+  local callbacks = Events.normalized(controller)
+  callbacks.room()
+  assertTrue(controller.dirty, "normalized callbacks must invoke Controller:onEvent")
+end
+
+local function testPlannerWaitsWhenCurrentRoomIsMissing()
+  local snapshot = baseSnapshot()
+  snapshot.currentRoom = 99
+  local result = Planner.plan(snapshot, { id = "boss.delirium", kind = "boss", destinationRooms = { 3 } })
+  assertEqual(result.status, "waiting", "planner should wait for a complete room graph")
+end
+
+local function testPlannerDoesNotFollowInvalidDoorTarget()
+  local snapshot = baseSnapshot()
+  snapshot.rooms[1].doors = { { to = 999, slot = 0 } }
+  local result = Planner.plan(snapshot, { id = "boss.delirium", kind = "boss", destinationRooms = { 3 } })
+  assertTrue(result.status == "waiting" or result.status == "unreachable", "invalid door targets must not throw")
+end
+
+local function testRoomGraphUsesSafeGridIndexAsCanonicalId()
+  local adapter = GameAdapter.new({ roomType = {} })
+  local level = { GetRooms = function()
+    return {
+      { ListIndex = 0, GridIndex = 100, SafeGridIndex = 100, VisitedCount = 1, DisplayFlags = 1, Data = { Type = 1 } },
+      { ListIndex = 1, GridIndex = 101, SafeGridIndex = 101, VisitedCount = 0, DisplayFlags = 1, Data = { Type = 1 } }
+    }
+  end }
+  local rooms = adapter:buildRooms(level, 100, nil, {})
+  local found = false
+  for _, room in ipairs(rooms) do if room.id == 100 then found = true end end
+  assertTrue(found, "room IDs must match Level current/door grid indices")
+end
+
+local function testRuntimeReportsRepeatedFailureOnce()
+  local messages = {}
+  local runtime = Runtime.new({
+    adapter = { build = function() error("synthetic planner failure") end },
+    controller = {},
+    getGoal = function() return {} end,
+    fingerprint = function() return "" end,
+    output = function(message) messages[#messages + 1] = message end,
+    capabilities = { tier = "base" }
+  })
+  runtime:update()
+  runtime:update()
+  assertEqual(#messages, 1, "repeated runtime errors should be reported once")
+  assertEqual(runtime:getRecommendation().status, "error", "runtime failures should become an error recommendation")
+end
+
+local function testRuntimeDefersRenderUntilRenderCall()
+  local rendered = 0
+  local runtime = Runtime.new({
+    adapter = { build = function() return { currentRoom = 1 } end },
+    controller = { tick = function() return { status = "ok" } end },
+    getGoal = function() return {} end,
+    fingerprint = function() return "1" end,
+    capabilities = { tier = "base" },
+    ui = { render = function() rendered = rendered + 1 end }
+  })
+  runtime:update()
+  assertEqual(rendered, 0, "update must not render the HUD")
+  runtime:render()
+  assertEqual(rendered, 1, "render should occur only through the render method")
+end
+
+local function testFairPlaySnapshotRemovesSecretAndInvalidTopology()
+  local Visibility = require("runcompass.visibility")
+  local filtered = Visibility.sanitizeSnapshot({
+    currentRoom = 1,
+    rooms = {
+      { id = 1, visited = true, hidden = false, doors = { { to = 2, slot = 0 }, { to = 99, slot = 1 } } },
+      { id = 2, visited = true, kind = "secret", hidden = false, doors = {} },
+      { id = 3, visited = false, hidden = false, doors = {} }
+    },
+    observations = { rooms = { [1] = { pickups = { { subtype = 42, quality = 4, category = "collectible" } } } } },
+    visibility = { curseLost = true, curseBlind = true }
+  })
+  assertTrue(filtered.rooms[2] == nil, "visited secret rooms must not reach the planner")
+  assertTrue(filtered.rooms[3] == nil, "unvisited Curse of the Lost rooms must not reach the planner")
+  assertEqual(#filtered.rooms[1].doors, 0, "doors into removed or invalid rooms must be pruned")
+  local pickup = filtered.observations.rooms[1].pickups[1]
+  assertEqual(pickup.subtype, nil, "Blind pickup identity must be stripped")
+  assertEqual(pickup.quality, nil, "Blind pickup quality must be stripped")
+  assertEqual(pickup.category, "collectible", "Blind pickup category may remain generic")
+end
+
+local function testSnapshotBuilderDeepCopiesRuntimeObservations()
+  local observations = { rooms = { [1] = { pickups = { { category = "collectible" } } } } }
+  local builder = Snapshot.new({
+    getCurrentRoom = function() return 1 end,
+    getMode = function() return { kind = "normal", difficulty = "normal" } end,
+    getVisibility = function() return { curseBlind = false, curseLost = false } end,
+    getPlayer = function() return { keys = 1 } end,
+    getRooms = function() return { { id = 1, visited = true, doors = {} } } end,
+    getObservations = function() return observations end
+  })
+  local snapshot = builder:build()
+  snapshot.observations.rooms[1].pickups[1].category = "changed"
+  assertEqual(observations.rooms[1].pickups[1].category, "collectible", "snapshot mutation must not change adapter state")
+end
+
+local function testGameAdapterStoresPickupsByObservedRoom()
+  local currentRoom = {
+    IsClear = function() return true end,
+    GetFrameCount = function() return 10 end,
+    GetDoor = function() return nil end
+  }
+  local level = {
+    GetCurrentRoomIndex = function() return 100 end,
+    GetCurrentRoom = function() return currentRoom end,
+    GetCurses = function() return 0 end,
+    GetRooms = function()
+      return { { GridIndex = 100, SafeGridIndex = 100, ListIndex = 0, VisitedCount = 1, DisplayFlags = 1, Data = { Type = 1 } } }
+    end
+  }
+  local game = {
+    GetLevel = function() return level end,
+    GetNumPlayers = function() return 0 end,
+    IsGreedMode = function() return false end,
+    GetSeeds = function() return nil end
+  }
+  local adapter = GameAdapter.new({
+    game = game,
+    isaac = { FindByType = function() return { { Variant = 100, SubType = 5, RoomIndex = 100 } } end },
+    entityType = { ENTITY_PICKUP = 5 },
+    pickupVariant = { PICKUP_COLLECTIBLE = 100 },
+    itemConfig = { GetCollectible = function() return { Quality = 4, Name = "Visible" } end },
+    collectibleType = { NUM_COLLECTIBLES = 10 }
+  })
+  local snapshot = adapter:build()
+  assertTrue(snapshot.observations.rooms[100] ~= nil, "observed pickups must be keyed by room")
+  assertEqual(snapshot.observations.rooms[100].pickups[1].quality, 4, "visible pickup quality should be retained")
+end
+
+local function testGameAdapterEmitsContractSnapshotAliases()
+  local level = {
+    GetCurrentRoomIndex = function() return 100 end,
+    GetCurrentRoom = function() return { IsClear = function() return true end, GetFrameCount = function() return 1 end } end,
+    GetCurses = function() return 0 end,
+    GetStage = function() return 2 end,
+    GetStageType = function() return 0 end,
+    GetRooms = function() return { { GridIndex = 100, SafeGridIndex = 100, VisitedCount = 1, DisplayFlags = 1, Data = { Type = 1 } } } end
+  }
+  local adapter = GameAdapter.new({ game = {
+    GetLevel = function() return level end, GetNumPlayers = function() return 0 end,
+    IsGreedMode = function() return false end, GetSeeds = function() return nil end,
+    GetFrameCount = function() return 300 end
+  }, roomType = {} })
+  local snapshot = adapter:build()
+  assertEqual(snapshot.floor.currentRoomId, 100, "contract snapshot should expose canonical floor room")
+  assertEqual(snapshot.run.elapsedSeconds, 10, "contract snapshot should expose run timing")
+  assertEqual(snapshot.frameId, 300, "contract snapshot should expose a frame identifier")
+end
+
+local function testRuntimeCanAssertFairPlayBoundary()
+  local runtime = Runtime.new({
+    adapter = { build = function() return { rooms = { { id = 1, hidden = true } }, observations = {}, visibility = {} } end },
+    controller = { tick = function() return { status = "ok" } end },
+    getGoal = function() return {} end,
+    fingerprint = function() return "1" end,
+    capabilities = { tier = "base" },
+    assertFairPlay = true
+  })
+  local result = runtime:update()
+  assertEqual(result.status, "error", "unsafe snapshots should be rejected in assertion mode")
+end
+
+local function testHushMilestoneDetectsMissedEntranceTimer()
+  local snapshot = baseSnapshot()
+  snapshot.run = { elapsedSeconds = 30 * 60 + 1 }
+  local result = Milestones.compile({ id = "boss.hush", kind = "boss" }, snapshot)
+  assertEqual(result.status, "unreachable", "Hush should be unreachable after the entrance timer")
+  assertTrue(result.reasonCodes.timer_missed, "missed Hush timer should be explained")
+end
+
+local function testMotherMilestoneReservesHealthAndQuestItems()
+  local result = Milestones.compile({ id = "boss.mother", kind = "boss" }, baseSnapshot())
+  assertEqual(result.requiredResources.health, 2, "Mother route should reserve Mausoleum entrance health")
+  assertTrue(result.requiredItems.knife_piece_1 and result.requiredItems.knife_piece_2, "Mother route should expose both knife-piece milestones")
+end
+
+local function testBeastMilestoneExposesPhotoAndAscentRequirements()
+  local result = Milestones.compile({ id = "boss.beast", kind = "boss" }, baseSnapshot())
+  assertTrue(result.requiredItems.photo and result.requiredItems.dad_note, "Beast route should expose photo and Dad's Note milestones")
+  assertTrue(result.futureFloors[1] == "Depths II / Strange Door", "Beast route should provide a strategic future-floor milestone")
+end
+
+local function testMilestonesRejectWrongPhotoAndConsumedKnife()
+  local beast = baseSnapshot()
+  beast.player.inventory = { photoChoice = "wrong" }
+  local wrongPhoto = Milestones.compile({ id = "boss.beast", kind = "boss" }, beast)
+  assertEqual(wrongPhoto.status, "unreachable", "wrong Beast photo should redirect the run")
+  assertTrue(wrongPhoto.reasonCodes.wrong_photo, "wrong photo should be explained")
+  local mother = baseSnapshot()
+  mother.player.inventory = { knifeConsumed = true }
+  local consumed = Milestones.compile({ id = "boss.mother", kind = "boss" }, mother)
+  assertEqual(consumed.status, "unreachable", "consumed knife route should be unreachable")
+  assertTrue(consumed.reasonCodes.knife_consumed, "consumed knife should be explained")
+end
+
+local function testSaveClampsUnsafeValues()
+  local migrated = Save.migrate({ hud = { scale = 99, x = -999, y = 999 }, bindings = { keyboardGoal = "bad" }, diagnostics = 1 })
+  assertEqual(migrated.hud.scale, 2, "HUD scale should be clamped")
+  assertEqual(migrated.hud.x, -400, "HUD X should be clamped")
+  assertEqual(migrated.hud.y, 240, "HUD Y should be clamped")
+  assertEqual(migrated.diagnostics, false, "diagnostics should require an explicit boolean")
+end
+
+local function testCatalogValidationReportsClassifiedTotals()
+  local catalog = Catalog.new({ { id = 1, name = "A", achievementId = 1 }, { id = 2, name = "Future", achievementId = 999 } }, { [1] = {} }, { version = 2, knownAchievementMax = 10 })
+  local report = catalog:validate({ version = 2 })
+  assertEqual(report.total, 2, "catalog report should count collectibles")
+  assertEqual(report.classified, 2, "catalog report should classify every entry")
+  assertEqual(report.unmapped, 1, "future IDs should be visible in diagnostics")
+end
+
+local function testSearchFindsShortestRevealedPath()
+  local result = Search.shortestPath(baseSnapshot(), 1, 3)
+  assertEqual(result.nodes[1], 1, "shortest path should start at the current room")
+  assertEqual(result.nodes[#result.nodes], 3, "shortest path should end at the goal room")
+  assertEqual(#result.nodes, 3, "shortest path should use two revealed doors")
+end
+
+local function testSearchBeamIsBoundedAndCanUseOptionalDestination()
+  local result = Search.beam(baseSnapshot(), { destinationRooms = { 3 } }, 12, 3)
+  assertTrue(result.expanded <= 12 * 3, "beam search must remain bounded by width and horizon")
+  assertEqual(result.nodes[#result.nodes], 3, "beam search should end at the goal destination")
+end
+
+local function testHysteresisRejectsSmallRiskEquivalentSwitch()
+  local snapshot = baseSnapshot()
+  local previous = { status = "ok", nextDoorSlot = 1, score = 10000, steps = { "old" } }
+  local result = Planner.plan(snapshot, { id = "boss.delirium", destinationRooms = { 3 } }, previous)
+  assertEqual(result.nextDoorSlot, 1, "small-value alternatives must not flicker the recommendation")
+end
+
+local function testHysteresisAllowsLargeImprovement()
+  local snapshot = baseSnapshot()
+  local previous = { status = "ok", nextDoorSlot = 1, score = 1, steps = { "old" } }
+  local result = Planner.plan(snapshot, { id = "boss.delirium", destinationRooms = { 3 } }, previous)
+  assertEqual(result.nextDoorSlot, 0, "a materially better route should replace the previous recommendation")
+end
+
+local function testInvalidPreviousRecommendationIsNotPreserved()
+  local snapshot = baseSnapshot()
+  local previous = { status = "ok", nextDoorSlot = 7, score = 10000, steps = { "old" } }
+  local result = Planner.plan(snapshot, { id = "boss.delirium", destinationRooms = { 3 } }, previous)
+  assertTrue(result.nextDoorSlot ~= 7, "a door that no longer exists cannot be preserved")
+end
+
+local function testValuationRanksSurvivalAndResourceMarginBeforeBuildGain()
+  local snapshot = baseSnapshot()
+  snapshot.player.keys = 1
+  local treasure = Valuation.evaluate(snapshot, { 1, 2, 3 }, { requiredResources = { keys = 1 } })
+  local shop = Valuation.evaluate(snapshot, { 1, 4, 3 }, { requiredResources = { keys = 1 } })
+  assertTrue(Valuation.compare(shop, treasure) > 0, "resource margin should outrank a treasure detour when only one key remains")
+end
+
+local function testValuationPrefersVisibleBuildGainWhenRiskIsEqual()
+  local snapshot = baseSnapshot()
+  snapshot.player.keys = 2
+  snapshot.rooms[2].cost = {}
+  local treasure = Valuation.evaluate(snapshot, { 1, 2, 3 }, { requiredResources = {} })
+  local shop = Valuation.evaluate(snapshot, { 1, 4, 3 }, { requiredResources = {} })
+  assertTrue(Valuation.compare(treasure, shop) > 0, "visible build gain should win after feasibility, risk, and margin tie")
+end
+
 local tests = {
   testRoutesToGoalThroughRevealedRooms,
   testNeverUsesHiddenSecretRoom,
@@ -254,7 +546,9 @@ local tests = {
   testHysteresisKeepsStableRecommendation,
   testVisibilityFiltersHiddenInformation,
   testCatalogClassifiesUnknownAndKnownGoals,
+  testCatalogClassifiesKnownUnmappedAchievementsInstructionally,
   testCapabilityDetectionFallsBackSafely,
+  testCapabilityDetectionProbesEnhancedFeaturesIndividually,
   testSaveMigrationUsesSafeDefaults,
   testSaveRoundTripsLocalData,
   testBlindCurseDoesNotValueHiddenPickup,
@@ -269,7 +563,31 @@ local tests = {
   testRouteCriticalCollectibleRuleResolvesToBoss,
   testWrongCharacterRedirectsUnlockGoal,
   testPersistentCounterGoalIsInstructionalWithoutEnhancedTier,
-  testBossRoomKindsUseBossIdEnum
+  testBossRoomKindsUseBossIdEnum,
+  testNormalizedCallbacksInvalidateRealController,
+  testPlannerWaitsWhenCurrentRoomIsMissing,
+  testPlannerDoesNotFollowInvalidDoorTarget,
+  testRoomGraphUsesSafeGridIndexAsCanonicalId,
+  testRuntimeReportsRepeatedFailureOnce,
+  testRuntimeDefersRenderUntilRenderCall,
+  testFairPlaySnapshotRemovesSecretAndInvalidTopology,
+  testSnapshotBuilderDeepCopiesRuntimeObservations,
+  testGameAdapterStoresPickupsByObservedRoom,
+  testGameAdapterEmitsContractSnapshotAliases,
+  testRuntimeCanAssertFairPlayBoundary,
+  testHushMilestoneDetectsMissedEntranceTimer,
+  testMotherMilestoneReservesHealthAndQuestItems,
+  testBeastMilestoneExposesPhotoAndAscentRequirements,
+  testMilestonesRejectWrongPhotoAndConsumedKnife,
+  testSaveClampsUnsafeValues,
+  testCatalogValidationReportsClassifiedTotals,
+  testSearchFindsShortestRevealedPath,
+  testSearchBeamIsBoundedAndCanUseOptionalDestination,
+  testHysteresisRejectsSmallRiskEquivalentSwitch,
+  testHysteresisAllowsLargeImprovement,
+  testInvalidPreviousRecommendationIsNotPreserved,
+  testValuationRanksSurvivalAndResourceMarginBeforeBuildGain,
+  testValuationPrefersVisibleBuildGainWhenRiskIsEqual
 }
 
 for index, test in ipairs(tests) do

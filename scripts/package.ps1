@@ -1,0 +1,16 @@
+param(
+  [Parameter(Mandatory=$true)][string]$OutputPath
+)
+
+$sourceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$resolvedOutput = [System.IO.Path]::GetFullPath($OutputPath)
+if ($resolvedOutput -eq [System.IO.Path]::GetFullPath($sourceRoot)) { throw "Refusing to package over the source tree" }
+if (Test-Path -LiteralPath $resolvedOutput) { Remove-Item -LiteralPath $resolvedOutput -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $resolvedOutput | Out-Null
+Copy-Item -LiteralPath (Join-Path $sourceRoot 'main.lua') -Destination $resolvedOutput -Force
+Copy-Item -LiteralPath (Join-Path $sourceRoot 'metadata.xml') -Destination $resolvedOutput -Force
+Copy-Item -LiteralPath (Join-Path $sourceRoot 'README.md') -Destination $resolvedOutput -Force
+Copy-Item -LiteralPath (Join-Path $sourceRoot 'runcompass') -Destination $resolvedOutput -Recurse -Force
+if (Test-Path -LiteralPath (Join-Path $sourceRoot 'strings')) { Copy-Item -LiteralPath (Join-Path $sourceRoot 'strings') -Destination $resolvedOutput -Recurse -Force }
+if (Test-Path -LiteralPath (Join-Path $sourceRoot 'gfx')) { Copy-Item -LiteralPath (Join-Path $sourceRoot 'gfx') -Destination $resolvedOutput -Recurse -Force }
+Write-Output "Packaged Run Compass runtime at $resolvedOutput"

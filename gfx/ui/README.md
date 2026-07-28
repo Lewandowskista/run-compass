@@ -1,0 +1,1 @@
+The arrow sprite is original Run Compass artwork. `compass-arrow.anm2` references the transparent PNG and is optional at runtime: the HUD falls back to a tinted glyph when the sprite layer is unavailable.

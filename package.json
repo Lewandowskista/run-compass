@@ -2,7 +2,7 @@
   "name": "run-compass-rep-plus",
   "private": true,
   "scripts": {
-    "test": "fengari tests/run.lua"
+    "test": "fengari tests/run.lua && fengari tests/performance.lua"
   },
   "devDependencies": {
     "fengari-node-cli": "0.1.0"

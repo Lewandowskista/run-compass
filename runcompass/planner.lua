@@ -1,5 +1,8 @@
 local Planner = {}
 local Visibility = require("runcompass.visibility")
+local Milestones = require("runcompass.milestones")
+local Search = require("runcompass.search")
+local Valuation = require("runcompass.valuation")
 
 local SUPPORTED_MODES = { normal = true, hard = true }
 
@@ -30,6 +33,7 @@ local function pathResources(path, roomMap)
   local cost = { keys = 0, bombs = 0, coins = 0, health = 0 }
   for index = 2, #path do
     local room = roomMap[path[index]]
+    if not room then return cost end
     for resource, amount in pairs(room.cost or {}) do
       cost[resource] = (cost[resource] or 0) + amount
     end
@@ -78,6 +82,7 @@ local function enumeratePaths(snapshot, goal, roomMap)
     end
     if #path >= 50 then return end
     local room = roomMap[roomId]
+    if not room then return end
     for _, door in ipairs(room.doors or {}) do
       local nextRoom = roomMap[door.to]
       if nextRoom and not seen[door.to] and isVisible(nextRoom, snapshot.visibility or {}) then
@@ -102,6 +107,23 @@ local function firstDoor(snapshot, roomMap, path)
   return nil
 end
 
+local function doorExists(snapshot, slot)
+  local roomMap = buildRoomMap(snapshot.rooms)
+  local current = roomMap[snapshot.currentRoom]
+  for _, door in ipairs(current and current.doors or {}) do
+    if door.slot == slot and roomMap[door.to] then return true end
+  end
+  return false
+end
+
+local function keepPrevious(snapshot, previous, recommendation)
+  if not previous or previous.status ~= "ok" or not doorExists(snapshot, previous.nextDoorSlot) then return false end
+  if previous.nextDoorSlot == recommendation.nextDoorSlot then return true end
+  local oldScore, newScore = tonumber(previous.score) or 0, tonumber(recommendation.score) or 0
+  if newScore <= oldScore then return true end
+  return (newScore - oldScore) < math.max(math.abs(oldScore), 1) * 0.10
+end
+
 local function recommendationForPath(snapshot, roomMap, candidate)
   local steps = {}
   for index = 2, math.min(#candidate.nodes, 4) do
@@ -113,10 +135,12 @@ local function recommendationForPath(snapshot, roomMap, candidate)
     status = "ok",
     nextDoorSlot = firstDoor(snapshot, roomMap, candidate.nodes),
     steps = steps,
-    score = candidate.score,
+    score = candidate.evaluation and candidate.evaluation.utility or candidate.score,
+    scoreVector = candidate.evaluation,
     reasonCodes = {
       goal_feasible = true,
-      resource_reservation = next(candidate.cost) ~= nil
+      resource_reservation = next(candidate.cost) ~= nil,
+      bounded_search = candidate.boundedSearch == true
     },
     confidence = "medium",
     capabilityTier = capabilityTier(snapshot)
@@ -125,8 +149,8 @@ end
 
 function Planner.plan(snapshot, goal, previous)
   if goal.status == "instructional" then
-    local reason = goal.requiredCapability == "enhanced" and "Install Repentogon 1.1.0+ to verify this goal" or "Install the catalog update before routing this goal"
-    return { status = "instructional", steps = { reason }, reasonCodes = { catalog_update_required = goal.requiredCapability ~= "enhanced", enhanced_required = goal.requiredCapability == "enhanced" }, confidence = "none", capabilityTier = capabilityTier(snapshot) }
+    local reason = goal.requiredCapability == "enhanced" and "Install Repentogon 1.1.0+ to verify this goal" or goal.status == "instructional_only" and "Follow the unlock instructions before routing this goal" or "Install the catalog update before routing this goal"
+    return { status = "instructional", steps = { reason }, reasonCodes = { catalog_update_required = goal.classification == "catalog_update_required", instructional_only = goal.classification == "instructional_only", enhanced_required = goal.requiredCapability == "enhanced" }, confidence = "none", capabilityTier = capabilityTier(snapshot) }
   end
   if goal.status == "prerequisite_redirect" then
     local character = snapshot.player and snapshot.player.characterToken
@@ -141,8 +165,28 @@ function Planner.plan(snapshot, goal, previous)
     return { status = "inactive", steps = {}, reasonCodes = { unsupported_mode = true }, confidence = "none", capabilityTier = capabilityTier(snapshot) }
   end
 
+  local milestone = Milestones.compile(goal, snapshot)
+  if milestone.status == "unreachable" then
+    return { status = "unreachable", steps = { "This route requirement is no longer available this run" }, reasonCodes = milestone.reasonCodes, confidence = "high", capabilityTier = capabilityTier(snapshot) }
+  end
+  local routedGoal = {}
+  for key, value in pairs(goal) do routedGoal[key] = value end
+  routedGoal.requiredResources = routedGoal.requiredResources or {}
+  for resource, amount in pairs(milestone.requiredResources) do
+    if (routedGoal.requiredResources[resource] or 0) < amount then routedGoal.requiredResources[resource] = amount end
+  end
+  goal = routedGoal
+
   local roomMap = buildRoomMap(snapshot.rooms)
+  if not roomMap[snapshot.currentRoom] then
+    return { status = "waiting", steps = { "Waiting for the current room graph to finish loading" }, reasonCodes = { room_graph_incomplete = true }, confidence = "none", capabilityTier = capabilityTier(snapshot) }
+  end
   local destinations = goal.destinationRooms or {}
+  for _, destination in ipairs(destinations) do
+    if destination == snapshot.currentRoom and snapshot.currentRoomClear then
+      return { status = "complete", steps = { "Goal room cleared" }, reasonCodes = { goal_room_cleared = true }, confidence = "high", capabilityTier = capabilityTier(snapshot) }
+    end
+  end
   if #destinations == 0 and goal.frontier then
     local current = roomMap[snapshot.currentRoom]
     for _, door in ipairs(current and current.doors or {}) do
@@ -151,7 +195,7 @@ function Planner.plan(snapshot, goal, previous)
           status = "explore",
           nextDoorSlot = door.slot,
           steps = { "Explore the revealed route", "Replan when the target branch appears" },
-          reasonCodes = { frontier_exploration = true },
+          reasonCodes = { frontier_exploration = true, portal_uncertainty = milestone.reasonCodes.portal_uncertainty },
           confidence = "low",
           capabilityTier = capabilityTier(snapshot)
         }
@@ -163,16 +207,44 @@ function Planner.plan(snapshot, goal, previous)
     if not isVisible(roomMap[id], snapshot.visibility or {}) then hiddenDestination = true end
   end
 
-  local paths = enumeratePaths(snapshot, goal, roomMap)
+  local destinationSet = copySet(goal.destinationRooms)
+  local beam = Search.beam(snapshot, goal, 12, 3)
+  local beamDestination = beam.nodes[#beam.nodes]
+  local beamCost = pathResources(beam.nodes, roomMap)
+  local paths = {}
+  for _, state in ipairs(beam.candidates or {}) do
+    local destination = state.nodes[#state.nodes]
+    if #state.nodes > 1 and destinationSet[destination] then
+      local cost = pathResources(state.nodes, roomMap)
+      local evaluation = Valuation.evaluate(snapshot, state.nodes, goal)
+      if canAfford(snapshot, goal, cost) and evaluation.feasible then
+        paths[#paths + 1] = { nodes = state.nodes, cost = cost, score = state.score, evaluation = evaluation, boundedSearch = true }
+      end
+    end
+  end
+  if #paths == 0 and #beam.nodes > 1 and destinationSet[beamDestination] and canAfford(snapshot, goal, beamCost) then
+    paths[1] = { nodes = beam.nodes, cost = beamCost, score = beam.score, evaluation = Valuation.evaluate(snapshot, beam.nodes, goal), boundedSearch = true }
+  end
+  if #paths == 0 then
+    for _, candidate in ipairs(enumeratePaths(snapshot, goal, roomMap)) do
+      candidate.evaluation = Valuation.evaluate(snapshot, candidate.nodes, goal)
+      paths[#paths + 1] = candidate
+    end
+  end
   if #paths == 0 then
     local reasonCodes = { hidden_information = hiddenDestination }
     if (goal.requiredResources and next(goal.requiredResources)) then reasonCodes.resource_reservation = true end
     return { status = "unreachable", steps = {}, reasonCodes = reasonCodes, confidence = "low", capabilityTier = capabilityTier(snapshot) }
   end
 
-  table.sort(paths, function(left, right) return left.score > right.score end)
+  table.sort(paths, function(left, right)
+    if left.evaluation and right.evaluation then return Valuation.compare(left.evaluation, right.evaluation) > 0 end
+    return left.score > right.score
+  end)
   local recommendation = recommendationForPath(snapshot, roomMap, paths[1])
-  if previous and previous.status == "ok" and previous.nextDoorSlot == recommendation.nextDoorSlot then
+  for code, enabled in pairs(milestone.reasonCodes or {}) do recommendation.reasonCodes[code] = enabled end
+  if next(milestone.requiredItems) then recommendation.reasonCodes.required_quest_items = true end
+  if keepPrevious(snapshot, previous, recommendation) then
     return previous
   end
   return recommendation
