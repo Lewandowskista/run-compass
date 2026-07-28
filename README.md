@@ -1,15 +1,15 @@
 # Run Compass [REP+]
 
-![Run Compass Observatory](docs/images/run-compass-observatory-hero.png)
-<img src="docs/images/run-compass-observatory-mark.png" alt="Run Compass Observatory mark" width="96" align="right">
+![Run Compass Observatory](https://raw.githubusercontent.com/Lewandowskista/run-compass/main/docs/images/run-compass-observatory-hero.png)
+<img src="https://raw.githubusercontent.com/Lewandowskista/run-compass/main/docs/images/run-compass-observatory-mark.png" alt="Run Compass Observatory mark" width="96" align="right">
 
 [![Version 1.1.0](https://img.shields.io/badge/version-1.1.0-8be04e?style=flat-square&labelColor=101b33)](metadata.xml)
 [![Tests](https://img.shields.io/badge/tests-fengari%20fixtures-8be04e?style=flat-square&labelColor=101b33)](docs/RELEASES.md)
-[![Fair play](https://img.shields.io/badge/fair--play-visible%20information-8be04e?style=flat-square&labelColor=101b33)](docs/FAIR_PLAY.md)
+[![Fair play](https://img.shields.io/badge/fair--play-visible%20information-8be04e?style=flat-square&labelColor=101b33)](https://github.com/Lewandowskista/run-compass/blob/main/docs/FAIR_PLAY.md)
 
 Run Compass is an Observatory for **The Binding of Isaac: Repentance+**: a fair-play route and build guide for solo Normal and Hard runs. Pick a boss or vanilla unlock, then get a compact next-door and visible-choice recommendation as the floor reveals itself. It is a decision aid, not an oracle—there is no guaranteed optimal play.
 
-[Install](docs/INSTALLATION.md) · [Controls](docs/CONTROLS.md) · [Fair-play method](docs/FAIR_PLAY.md) · [Compatibility API](docs/COMPATIBILITY.md) · [Releases](docs/RELEASES.md)
+[Install](https://github.com/Lewandowskista/run-compass/blob/main/docs/INSTALLATION.md) · [Controls](https://github.com/Lewandowskista/run-compass/blob/main/docs/CONTROLS.md) · [Fair-play method](https://github.com/Lewandowskista/run-compass/blob/main/docs/FAIR_PLAY.md) · [Compatibility API](https://github.com/Lewandowskista/run-compass/blob/main/docs/COMPATIBILITY.md) · [Releases](https://github.com/Lewandowskista/run-compass/blob/main/docs/RELEASES.md)
 
 ## What the Observatory sees
 
@@ -31,7 +31,7 @@ Run Compass is an Observatory for **The Binding of Isaac: Repentance+**: a fair-
 | Repentogon 1.1.0+ | Optional | Enhanced tier: persistent unlock/completion progress and richer callbacks, probed feature-by-feature. |
 | EID | Optional | Descriptions only; never scores, reveals identities, or supplies route facts. |
 
-Install the Workshop package, enable Run Compass, and start a solo Normal/Hard run. Mod Config Menu is recommended for settings; base routing still runs without it using safe defaults and an in-game notice. For a local checkout, see the [installation guide](docs/INSTALLATION.md), including `scripts/deploy.ps1` and package staging.
+Install the Workshop package, enable Run Compass, and start a solo Normal/Hard run. Mod Config Menu is recommended for settings; base routing still runs without it using safe defaults and an in-game notice. For a local checkout, see the [installation guide](https://github.com/Lewandowskista/run-compass/blob/main/docs/INSTALLATION.md), including `scripts/deploy.ps1` and package staging.
 
 ## First run: a two-minute route
 
@@ -44,11 +44,11 @@ The HUD is hidden while a room is uncleared unless **Pinned** is enabled. A reco
 
 ## Controls and settings
 
-The [controls guide](docs/CONTROLS.md) lists keyboard browser navigation, currently supported controller D-pad/X/Y navigation, configured browser/toggle bindings, console commands, and every Mod Config Menu setting. Keyboard text search uses letter keys; controller text entry is not assumed. Keyboard and controller bindings are editable; defaults are stored as game input codes so they survive save migration. HUD visibility, pinning, scale, X/Y offset, automatic comparisons, detail level (1–3), confidence, warnings, diagnostics, and EID text are all opt-in/configurable.
+The [controls guide](https://github.com/Lewandowskista/run-compass/blob/main/docs/CONTROLS.md) lists keyboard browser navigation, currently supported controller D-pad/X/Y navigation, configured browser/toggle bindings, console commands, and every Mod Config Menu setting. Keyboard text search uses letter keys; controller text entry is not assumed. Keyboard and controller bindings are editable; defaults are stored as game input codes so they survive save migration. HUD visibility, pinning, scale, X/Y offset, automatic comparisons, detail level (1–3), confidence, warnings, diagnostics, and EID text are all opt-in/configurable.
 
 ## Fair-play methodology
 
-Run Compass consumes normalized observations only: revealed room topology, visible entities, known inventory/resources, and callbacks the current capability tier actually exposes. Its bounded planner ranks goal feasibility, survival, reserved-resource margin, goal utility, build gain, volatility, then detour/time. Confidence and warnings travel with the explanation. Read the [methodology](docs/FAIR_PLAY.md) before using it for challenge or speedrun practice.
+Run Compass consumes normalized observations only: revealed room topology, visible entities, known inventory/resources, and callbacks the current capability tier actually exposes. Its bounded planner ranks goal feasibility, survival, reserved-resource margin, goal utility, build gain, volatility, then detour/time. Confidence and warnings travel with the explanation. Read the [methodology](https://github.com/Lewandowskista/run-compass/blob/main/docs/FAIR_PLAY.md) before using it for challenge or speedrun practice.
 
 ## Extend the model
 
@@ -69,7 +69,7 @@ RunCompassAPI:RegisterCharacterProfile("my-mod", "my_character", {
 })
 ```
 
-See [COMPATIBILITY.md](docs/COMPATIBILITY.md) for validation behavior, model fields, and contribution guidance. Every live collectible still receives an `ItemConfig` baseline; curated route-critical rules remain versioned in `runcompass/rules.lua`.
+See [COMPATIBILITY.md](https://github.com/Lewandowskista/run-compass/blob/main/docs/COMPATIBILITY.md) for validation behavior, model fields, and contribution guidance. Every live collectible still receives an `ItemConfig` baseline; curated route-critical rules remain versioned in `runcompass/rules.lua`.
 
 ## Test, package, release
 
@@ -79,7 +79,7 @@ npm.cmd test
 ./scripts/package.ps1 -OutputPath C:\tmp\run-compass-public-package
 ```
 
-The fixture, performance, and build-guide suites are described in [RELEASES.md](docs/RELEASES.md). Packaging copies runtime files plus the five user-facing guides and Observatory images used by this README; tests, plans, and development tooling stay out of Workshop output. Before promotion, perform a clean install/save-continuation check and the documented mixed-character soak.
+The fixture, performance, and build-guide suites are described in the [release guide](https://github.com/Lewandowskista/run-compass/blob/main/docs/RELEASES.md). Workshop packaging copies only runtime files and assets; repository guides and Observatory presentation images remain available in GitHub. Before promotion, perform a clean install/save-continuation check and the documented mixed-character soak.
 
 ## Scope
 

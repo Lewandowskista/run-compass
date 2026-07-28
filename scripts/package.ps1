@@ -14,16 +14,4 @@ Copy-Item -LiteralPath (Join-Path $sourceRoot 'README.md') -Destination $resolve
 Copy-Item -LiteralPath (Join-Path $sourceRoot 'runcompass') -Destination $resolvedOutput -Recurse -Force
 if (Test-Path -LiteralPath (Join-Path $sourceRoot 'strings')) { Copy-Item -LiteralPath (Join-Path $sourceRoot 'strings') -Destination $resolvedOutput -Recurse -Force }
 if (Test-Path -LiteralPath (Join-Path $sourceRoot 'gfx')) { Copy-Item -LiteralPath (Join-Path $sourceRoot 'gfx') -Destination $resolvedOutput -Recurse -Force }
-$docsSource = Join-Path $sourceRoot 'docs'
-$docsOutput = Join-Path $resolvedOutput 'docs'
-$publicDocs = @('INSTALLATION.md', 'CONTROLS.md', 'FAIR_PLAY.md', 'COMPATIBILITY.md', 'RELEASES.md')
-if (Test-Path -LiteralPath $docsSource) {
-  New-Item -ItemType Directory -Force -Path $docsOutput | Out-Null
-  foreach ($doc in $publicDocs) {
-    $docPath = Join-Path $docsSource $doc
-    if (Test-Path -LiteralPath $docPath) { Copy-Item -LiteralPath $docPath -Destination $docsOutput -Force }
-  }
-  $imageSource = Join-Path $docsSource 'images'
-  if (Test-Path -LiteralPath $imageSource) { Copy-Item -LiteralPath $imageSource -Destination $docsOutput -Recurse -Force }
-}
 Write-Output "Packaged Run Compass runtime at $resolvedOutput"
