@@ -7,10 +7,11 @@ function EID.detect(provider)
   return adapter
 end
 
-function EID:describe(id)
-  if not self.available then return nil end
+function EID:describe(id, visibility)
+  if visibility and visibility.curseBlind then return nil end
+  if id == nil or not self.available then return nil end
   local ok, value = pcall(self.provider.getDescription, self.provider, id)
-  return ok and value or nil
+  return ok and type(value) == "string" and value or nil
 end
 
 return EID

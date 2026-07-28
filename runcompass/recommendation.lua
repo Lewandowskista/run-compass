@@ -15,7 +15,23 @@ function Recommendation.finalize(snapshot, goal, recommendation, milestone, deci
   if not ACTIONABLE[recommendation.status] then return recommendation end
   local visibleChoices = {}
   for _, choice in ipairs(snapshot.visibleChoices or {}) do
-    if choice.roomId == snapshot.currentRoom then visibleChoices[#visibleChoices + 1] = choice end
+    if choice.roomId == snapshot.currentRoom then
+      local blindIdentity = snapshot.visibility and snapshot.visibility.curseBlind
+        and (choice.kind == "collectible" or choice.kind == "trinket" or choice.kind == "card")
+      if blindIdentity then
+        choice = {
+          id = choice.id,
+          roomId = choice.roomId,
+          position = choice.position,
+          kind = choice.kind,
+          choiceGroupId = choice.choiceGroupId,
+          eligibleActors = choice.eligibleActors,
+          observedIdentity = nil,
+          confidence = "none"
+        }
+      end
+      visibleChoices[#visibleChoices + 1] = choice
+    end
   end
   if #visibleChoices > 0 then
     recommendation.decision = ChoiceEngine.evaluate(

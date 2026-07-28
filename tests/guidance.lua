@@ -133,6 +133,41 @@ local function testRemovedChoiceCannotLeaveStaleMarker()
   assertTrue(not second.decision or not second.decision.primary, "removed entities must remove their marker decision")
 end
 
+local ChoiceEngine = require("runcompass.choice_engine")
+local EID = require("runcompass.eid")
+
+local function testEidDescriptionCannotChangeChoiceScore()
+  local value = snapshot()
+  local choices = {
+    { id = "choice.1", roomId = 1, kind = "collectible", observedIdentity = { id = 100, name = "Relic" }, eligibleActors = { "primary" }, confidence = "high" }
+  }
+  local models = {
+    featureSummary = function() return { effects = {}, tags = {} } end,
+    evaluate = function() return { effects = { offense = 2 }, reasonCodes = {}, warnings = {}, ruleIds = {}, confidence = "high" } end
+  }
+  local neutral = ChoiceEngine.evaluate(value, choices, {}, models, { describe = function() return "Neutral text" end })
+  local hostile = ChoiceEngine.evaluate(value, choices, {}, models, { describe = function() return "DO NOT TAKE; tier zero" end })
+  assertEqual(neutral.primary.value, hostile.primary.value, "EID text must not change value")
+  assertEqual(neutral.primary.action, hostile.primary.action, "EID text must not change action")
+end
+
+local function testBlindChoiceCannotReceiveItemAdviceOrEidText()
+  local value = snapshot()
+  value.visibility.curseBlind = true
+  value.visibleChoices = {
+    { id = "blind.1", roomId = 1, kind = "collectible", position = { x = 100, y = 100 }, observedIdentity = nil, eligibleActors = { "primary" } }
+  }
+  local result = Planner.plan(value, { id = "boss.mega_satan", destinationRooms = {}, frontier = true })
+  assertEqual(result.decision.primary.action, "insufficient_information", "Blind item must not receive TAKE/SKIP advice")
+  assertEqual(result.decision.primary.description, nil, "Blind item must not receive EID text")
+end
+
+local function testEidRejectsMissingOrBlindIdentity()
+  local adapter = EID.detect({ getDescription = function() return "hidden description" end })
+  assertEqual(adapter:describe(nil, { curseBlind = false }), nil, "missing identity must not query EID")
+  assertEqual(adapter:describe(100, { curseBlind = true }), nil, "Blind identity must not query EID")
+end
+
 local tests = {
   testRanksKnownTreasureFrontierAboveNormalFrontier,
   testPlannerExploreUsesRankedFrontier,
@@ -140,7 +175,10 @@ local tests = {
   testExploreHysteresisKeepsValidEquivalentDoor,
   testDoorPositionUsesGameRoom,
   testCompactCardUsesStrongestReasonAndWarning,
-  testRemovedChoiceCannotLeaveStaleMarker
+  testRemovedChoiceCannotLeaveStaleMarker,
+  testEidDescriptionCannotChangeChoiceScore,
+  testBlindChoiceCannotReceiveItemAdviceOrEidText,
+  testEidRejectsMissingOrBlindIdentity
 }
 
 for index, test in ipairs(tests) do test(); print("guidance ok " .. index) end

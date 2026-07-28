@@ -98,7 +98,7 @@ function ChoiceEngine.evaluate(snapshot, choices, goal, models, descriptions)
         synergyRuleIds = model.ruleIds,
         reasonCodes = model.reasonCodes,
         warnings = model.warnings,
-        description = descriptions and item.id and descriptions:describe(item.id) or nil,
+        description = descriptions and item.id and descriptions:describe(item.id, snapshot and snapshot.visibility) or nil,
         confidence = choice.confidence or model.confidence,
         value = value
       }
