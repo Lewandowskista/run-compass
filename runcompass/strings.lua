@@ -8,7 +8,12 @@ local Strings = {
     prerequisite = "Choose the required character or prerequisite run",
     instructional = "This unlock needs a prerequisite or enhanced progress",
     waiting = "Waiting for the room graph to finish generating",
-    error = "Planner paused after an internal error"
+    error = "Planner paused after an internal error",
+    choice = "Choice: %s (%s)",
+    alternative = "Alternative: %s",
+    hold = "Hold/skip: available",
+    why = "Why: %s",
+    warning = "Warning: %s"
   },
   browser = {
     title = "Run Compass - goal browser",

@@ -71,6 +71,17 @@ function Visibility.sanitizeSnapshot(snapshot)
   end
   snapshot.observations.rooms = observationRooms
   snapshot.observations.pickups = Visibility.filterPickups(snapshot.observations.pickups or {}, flags)
+  local choices = {}
+  for _, choice in ipairs(snapshot.visibleChoices or {}) do
+    if roomIds[choice.roomId] then
+      if flags.curseBlind then
+        choice.observedIdentity = nil
+        choice.confidence = "low"
+      end
+      choices[#choices + 1] = choice
+    end
+  end
+  snapshot.visibleChoices = choices
   return snapshot
 end
 
@@ -97,6 +108,9 @@ function Visibility.assertFairSnapshot(snapshot)
     if not check(snapshot.observations and snapshot.observations.pickups) then return false, "Blind identity reached planner" end
     for _, observation in pairs(snapshot.observations and snapshot.observations.rooms or {}) do
       if not check(observation.pickups) then return false, "Blind identity reached planner" end
+    end
+    for _, choice in ipairs(snapshot.visibleChoices or {}) do
+      if choice.observedIdentity then return false, "Blind choice identity reached planner" end
     end
   end
   return true

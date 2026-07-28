@@ -1,3 +1,3 @@
 # Runtime assets
 
-The HUD currently uses Isaac's native text renderer and door-slot labels, keeping the first build resolution-independent and avoiding hidden-information graphics. A future visual pass can add a sprite arrow without changing the planner or controller contracts.
+`gfx/ui/compass-arrow.png` and `gfx/ui/compass-arrow.anm2` are original, transparent HUD marker assets shipped with the runtime package. The current renderer keeps a resolution-independent text fallback and uses the same precomputed door/choice coordinates, so missing sprite support never affects routing or fair-play filtering.

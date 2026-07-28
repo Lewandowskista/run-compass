@@ -118,7 +118,7 @@ end
 
 local function testSaveMigrationUsesSafeDefaults()
   local migrated = Save.migrate({ schemaVersion = 0, selectedGoalId = "boss.delirium" })
-  assertEqual(migrated.schemaVersion, 2, "save data should be migrated")
+  assertEqual(migrated.schemaVersion, 3, "save data should be migrated")
   assertEqual(migrated.pinned, false, "missing fields should use safe defaults")
 end
 
@@ -200,6 +200,17 @@ local function testPresentationFormatsCompactRecommendation()
   local lines = Presentation.lines({ status = "ok", steps = { "Go to treasure", "Then boss" }, reasonCodes = { resource_reservation = true }, confidence = "medium", capabilityTier = "base" })
   assertEqual(lines[1], "Go to treasure", "HUD should show the first next step")
   assertTrue(string.find(lines[#lines], "BASE", 1, true) ~= nil, "HUD should show capability tier")
+end
+
+local function testPresentationIncludesBuildChoiceComparison()
+  local lines = Presentation.lines({ status = "ok", steps = { "Go to treasure" }, reasonCodes = {}, confidence = "high", capabilityTier = "enhanced", decision = {
+    primary = { action = "take", choiceId = "p1", reasonCodes = { owned_item_synergy = true }, confidence = "high" },
+    alternatives = { { action = "skip", choiceId = "s1" } },
+    skip = { action = "skip" }, comparisonRequired = true
+  } })
+  local rendered = table.concat(lines, "|")
+  assertTrue(string.find(rendered, "take", 1, true) ~= nil, "HUD should show the primary action")
+  assertTrue(string.find(rendered, "owned_item_synergy", 1, true) ~= nil, "HUD should show structured synergy rationale")
 end
 
 local function testInstructionalGoalDoesNotPretendToRoute()
@@ -558,6 +569,7 @@ local tests = {
   testEventsNormalizeKnownCallbacks,
   testGoalResolverFindsCurrentFloorBoss,
   testPresentationFormatsCompactRecommendation,
+  testPresentationIncludesBuildChoiceComparison,
   testInstructionalGoalDoesNotPretendToRoute,
   testCompletedGoalStopsRouting,
   testRouteCriticalCollectibleRuleResolvesToBoss,

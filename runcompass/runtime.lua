@@ -15,6 +15,8 @@ function Runtime.new(env)
     fingerprint = env.fingerprint or function() return "" end,
     output = env.output,
     capabilities = env.capabilities or { tier = "base" },
+    decisionModels = env.decisionModels,
+    eid = env.eid,
     assertFairPlay = env.assertFairPlay == true,
     ui = env.ui,
     snapshot = nil,
@@ -50,6 +52,8 @@ function Runtime:update()
   end
   snapshot = Visibility.sanitizeSnapshot(snapshot)
   snapshot.capabilities = self.capabilities
+  snapshot.decisionModels = self.decisionModels
+  snapshot.eid = self.eid
   local fingerprinted, nextFingerprint = pcall(self.fingerprint, snapshot)
   if not fingerprinted then return self:_error(nextFingerprint) end
   if self.lastFingerprint and nextFingerprint ~= self.lastFingerprint and self.controller.onEvent then

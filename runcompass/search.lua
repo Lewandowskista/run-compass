@@ -77,6 +77,7 @@ local function candidates(snapshot, goal)
     end
   end
   for _, id in ipairs(goal.destinationRooms or {}) do add(id) end
+  for _, choice in ipairs(snapshot.visibleChoices or {}) do add(choice.roomId) end
   for _, room in ipairs(snapshot.rooms or {}) do
     if room.kind == "treasure" or room.kind == "shop" or room.kind == "arcade" then add(room.id) end
   end
