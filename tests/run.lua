@@ -17,6 +17,7 @@ local Runtime = require("runcompass.runtime")
 local Milestones = require("runcompass.milestones")
 local Search = require("runcompass.search")
 local Valuation = require("runcompass.valuation")
+local MCM = require("runcompass.mcm")
 
 local function assertEqual(actual, expected, message)
   if actual ~= expected then
@@ -549,6 +550,47 @@ local function testValuationPrefersVisibleBuildGainWhenRiskIsEqual()
   assertTrue(Valuation.compare(treasure, shop) > 0, "visible build gain should win after feasibility, risk, and margin tie")
 end
 
+local function testMcmKeybindRowsOpenInteractivePopups()
+  local originalMenu = rawget(_G, "ModConfigMenu")
+  local originalMcm = rawget(_G, "MCM")
+  local settings = {}
+  _G.ModConfigMenu = {
+    OptionType = {
+      BOOLEAN = 4,
+      NUMBER = 5,
+      KEYBIND_KEYBOARD = 6,
+      KEYBIND_CONTROLLER = 7
+    },
+    PopupGfx = { WIDE_SMALL = "wide-small" },
+    KeyboardToString = { [117] = "F6", [118] = "F7" },
+    ControllerToString = { [10] = "A", [13] = "Menu" },
+    AddSetting = function(_, _, config) settings[#settings + 1] = config end
+  }
+  _G.MCM = nil
+
+  local state = {
+    bindings = { keyboardGoal = 117, keyboardToggle = 118, controllerGoal = 10, controllerToggle = 13 },
+    hud = { visible = true, scale = 1, x = 0, y = 0 },
+    pinned = false,
+    diagnostics = false,
+    decision = { autoCompare = true, detailLevel = 2, showConfidence = true, showWarnings = true, eidDescriptions = false }
+  }
+  local registered = MCM.register(state)
+
+  _G.ModConfigMenu = originalMenu
+  _G.MCM = originalMcm
+
+  assertTrue(registered, "MCM registration should succeed")
+  assertEqual(settings[1].Display(), "Goal browser: F6", "keyboard bindings should use friendly MCM key names")
+  assertEqual(settings[3].Display(), "Controller goal browser: A", "controller bindings should use friendly MCM button names")
+  for index = 1, 4 do
+    local option = settings[index]
+    assertTrue(type(option.Popup) == "function", "keybind row " .. index .. " must open an input popup")
+    assertEqual(option.PopupGfx, "wide-small", "keybind popup should use the installed MCM popup style")
+    assertEqual(option.PopupWidth, 280, "keybind popup should fit its instructions")
+  end
+end
+
 local tests = {
   testRoutesToGoalThroughRevealedRooms,
   testNeverUsesHiddenSecretRoom,
@@ -599,7 +641,8 @@ local tests = {
   testHysteresisAllowsLargeImprovement,
   testInvalidPreviousRecommendationIsNotPreserved,
   testValuationRanksSurvivalAndResourceMarginBeforeBuildGain,
-  testValuationPrefersVisibleBuildGainWhenRiskIsEqual
+  testValuationPrefersVisibleBuildGainWhenRiskIsEqual,
+  testMcmKeybindRowsOpenInteractivePopups
 }
 
 for index, test in ipairs(tests) do

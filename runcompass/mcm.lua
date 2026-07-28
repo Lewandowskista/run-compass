@@ -4,6 +4,12 @@ function MCM.register(state, onChanged)
   local menu = rawget(_G, "ModConfigMenu") or rawget(_G, "MCM")
   if type(menu) ~= "table" or type(menu.AddSetting) ~= "function" then return false end
   local optionType = menu.OptionType or {}
+  local function bindingName(value, isController)
+    local names = isController and menu.ControllerToString or menu.KeyboardToString
+    if type(names) == "table" and names[value] then return names[value] end
+    if value == nil or value == -1 then return "Unbound" end
+    return tostring(value)
+  end
   local function setting(category, name, kind, display, current, change, info, minimum, maximum, modifyBy)
     local config = {
       Type = optionType[kind],
@@ -13,21 +19,23 @@ function MCM.register(state, onChanged)
       Info = info or {}
     }
     if kind == "NUMBER" then config.Minimum = minimum or 0.5; config.Maximum = maximum or 2; config.ModifyBy = modifyBy or 0.1 end
-    pcall(menu.AddSetting, "Run Compass", category, {
-      Type = config.Type,
-      CurrentSetting = config.CurrentSetting,
-      Display = config.Display,
-      OnChange = config.OnChange,
-      Info = config.Info,
-      Minimum = config.Minimum,
-      Maximum = config.Maximum,
-      ModifyBy = config.ModifyBy
-    })
+    if kind == "KEYBIND_KEYBOARD" or kind == "KEYBIND_CONTROLLER" then
+      local isController = kind == "KEYBIND_CONTROLLER"
+      config.PopupGfx = menu.PopupGfx and menu.PopupGfx.WIDE_SMALL or nil
+      config.PopupWidth = 280
+      config.Popup = function()
+        local device = isController and "controller" or "keyboard"
+        return "Press a button on your " .. device .. " to change this binding."
+          .. "$newline$newlinePress the current button to keep it unchanged."
+          .. "$newlinePress Back to clear it."
+      end
+    end
+    pcall(menu.AddSetting, "Run Compass", category, config)
   end
-  setting("General", "Goal browser", "KEYBIND_KEYBOARD", function() return "Goal browser: " .. tostring(state.bindings.keyboardGoal) end, function() return state.bindings.keyboardGoal end, function(value) state.bindings.keyboardGoal = value end)
-  setting("General", "Toggle guidance", "KEYBIND_KEYBOARD", function() return "Toggle guidance: " .. tostring(state.bindings.keyboardToggle) end, function() return state.bindings.keyboardToggle end, function(value) state.bindings.keyboardToggle = value end)
-  setting("General", "Controller goal browser", "KEYBIND_CONTROLLER", function() return "Controller goal browser: " .. tostring(state.bindings.controllerGoal) end, function() return state.bindings.controllerGoal end, function(value) state.bindings.controllerGoal = value end)
-  setting("General", "Controller guidance", "KEYBIND_CONTROLLER", function() return "Controller guidance: " .. tostring(state.bindings.controllerToggle) end, function() return state.bindings.controllerToggle end, function(value) state.bindings.controllerToggle = value end)
+  setting("General", "Goal browser", "KEYBIND_KEYBOARD", function() return "Goal browser: " .. bindingName(state.bindings.keyboardGoal, false) end, function() return state.bindings.keyboardGoal end, function(value) state.bindings.keyboardGoal = value end)
+  setting("General", "Toggle guidance", "KEYBIND_KEYBOARD", function() return "Toggle guidance: " .. bindingName(state.bindings.keyboardToggle, false) end, function() return state.bindings.keyboardToggle end, function(value) state.bindings.keyboardToggle = value end)
+  setting("General", "Controller goal browser", "KEYBIND_CONTROLLER", function() return "Controller goal browser: " .. bindingName(state.bindings.controllerGoal, true) end, function() return state.bindings.controllerGoal end, function(value) state.bindings.controllerGoal = value end)
+  setting("General", "Controller guidance", "KEYBIND_CONTROLLER", function() return "Controller guidance: " .. bindingName(state.bindings.controllerToggle, true) end, function() return state.bindings.controllerToggle end, function(value) state.bindings.controllerToggle = value end)
   setting("HUD", "Enabled", "BOOLEAN", function() return "HUD: " .. (state.hud.visible and "On" or "Off") end, function() return state.hud.visible end, function(value) state.hud.visible = value end)
   setting("HUD", "Pinned", "BOOLEAN", function() return "Pinned: " .. (state.pinned and "On" or "Off") end, function() return state.pinned end, function(value) state.pinned = value end)
   setting("HUD", "Scale", "NUMBER", function() return "Scale: " .. tostring(state.hud.scale) end, function() return state.hud.scale end, function(value) state.hud.scale = value end)
