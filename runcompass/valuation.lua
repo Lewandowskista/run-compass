@@ -9,39 +9,66 @@ local function roomMap(rooms)
   return result
 end
 
-function Valuation.evaluate(snapshot, nodes, goal)
-  local rooms, cost = roomMap(snapshot.rooms), { keys = 0, bombs = 0, coins = 0, health = 0 }
-  local buildGain, risk = 0, 0
-  local goalRooms = {}
-  for _, id in ipairs(goal and goal.destinationRooms or {}) do goalRooms[id] = true end
-  for index = 2, #nodes do
-    local room = rooms[nodes[index]]
-    if not room then return { feasible = false, survivalRisk = math.huge, resourceMargin = -math.huge, buildGain = 0, detour = math.huge, time = math.huge } end
-    for resource, amount in pairs(room.cost or {}) do cost[resource] = (cost[resource] or 0) + amount end
-    if room.clear == false then risk = risk + (room.kind == "boss" and 2 or 1) end
-    if not goalRooms[room.id] then
-      for _, pickup in ipairs(Visibility.filterPickups(room.pickups or {}, snapshot.visibility or {})) do
-        buildGain = buildGain + (pickup.quality or 0) * 10
+function Valuation.newTotals()
+  return { cost = { keys = 0, bombs = 0, coins = 0, health = 0 }, buildGain = 0, risk = 0 }
+end
+
+function Valuation.cloneTotals(totals)
+  local cost = totals.cost
+  return {
+    cost = { keys = cost.keys, bombs = cost.bombs, coins = cost.coins, health = cost.health },
+    buildGain = totals.buildGain,
+    risk = totals.risk
+  }
+end
+
+-- Applies one room's contribution to a running totals table (cost, risk, raw
+-- buildGain including treasure/shop bonuses and pickup-quality gains). Callers
+-- that need per-path evaluation but not the missing-room short circuit (e.g.
+-- incremental BFS accumulation) can call this directly per visited room.
+function Valuation.accumulate(snapshot, room, goalRooms, totals)
+  for resource, amount in pairs(room.cost or {}) do totals.cost[resource] = (totals.cost[resource] or 0) + amount end
+  if room.clear == false then totals.risk = totals.risk + (room.kind == "boss" and 2 or 1) end
+  if not goalRooms[room.id] then
+    if room.pickups and room.pickups[1] then
+      for _, pickup in ipairs(Visibility.filterPickups(room.pickups, snapshot.visibility or {})) do
+        totals.buildGain = totals.buildGain + (pickup.quality or 0) * 10
       end
-      if room.kind == "treasure" then buildGain = buildGain + 2 end
-      if room.kind == "shop" then buildGain = buildGain + 1 end
     end
+    if room.kind == "treasure" then totals.buildGain = totals.buildGain + 2 end
+    if room.kind == "shop" then totals.buildGain = totals.buildGain + 1 end
   end
+  return totals
+end
+
+-- Computes feasibility, resourceMargin, buildGain penalties, survivalRisk,
+-- detour/time, and utility from accumulated totals and a path length (number
+-- of nodes in the path, matching what `#nodes` would have been).
+function Valuation.finalize(snapshot, goal, totals, pathLength)
+  local cost, buildGain, risk = totals.cost, totals.buildGain, totals.risk
   local available, required = snapshot.player or {}, goal and goal.requiredResources or {}
-  local resourceMargin, feasible, hasRequirement = nil, true, false
-  for _, resource in ipairs(RESOURCE_NAMES) do
-    local margin = (available[resource] or 0) - (cost[resource] or 0) - (required[resource] or 0)
-    if required[resource] then
-      hasRequirement = true
-      if margin < 0 then feasible = false end
-      if not resourceMargin or margin < resourceMargin then resourceMargin = margin end
+  local resourceMargin, feasible = 0, true
+  -- `required` is empty for the common case (no resource requirements on this
+  -- goal, e.g. frontier exploration): skip the per-resource margin scan
+  -- entirely rather than iterating RESOURCE_NAMES only to discover nothing
+  -- was required, since this runs once per ranked candidate.
+  if next(required) ~= nil then
+    resourceMargin = nil
+    local hasRequirement = false
+    for _, resource in ipairs(RESOURCE_NAMES) do
+      local margin = (available[resource] or 0) - (cost[resource] or 0) - (required[resource] or 0)
+      if required[resource] then
+        hasRequirement = true
+        if margin < 0 then feasible = false end
+        if not resourceMargin or margin < resourceMargin then resourceMargin = margin end
+      end
     end
+    if not hasRequirement then resourceMargin = 0 end
   end
-  if not hasRequirement then resourceMargin = 0 end
   buildGain = buildGain - (cost.keys or 0) * 20 - (cost.bombs or 0) * 8 - (cost.coins or 0) * 0.25 - (cost.health or 0) * 15
   local maxHealth = math.max(1, available.maxHealth or available.health or 1)
   local survivalRisk = risk / maxHealth
-  local detour, time = math.max(0, #nodes - 1), math.max(0, #nodes - 1)
+  local detour, time = math.max(0, pathLength - 1), math.max(0, pathLength - 1)
   return {
     feasible = feasible,
     survivalRisk = survivalRisk,
@@ -54,18 +81,40 @@ function Valuation.evaluate(snapshot, nodes, goal)
   }
 end
 
-function Valuation.compare(left, right)
-  local function cmp(a, b, higher)
-    if a == b then return 0 end
-    if higher then return a > b and 1 or -1 end
-    return a < b and 1 or -1
+function Valuation.evaluate(snapshot, nodes, goal)
+  local rooms = roomMap(snapshot.rooms)
+  local totals = Valuation.newTotals()
+  local goalRooms = {}
+  for _, id in ipairs(goal and goal.destinationRooms or {}) do goalRooms[id] = true end
+  for index = 2, #nodes do
+    local room = rooms[nodes[index]]
+    if not room then return { feasible = false, survivalRisk = math.huge, resourceMargin = -math.huge, buildGain = 0, detour = math.huge, time = math.huge } end
+    Valuation.accumulate(snapshot, room, goalRooms, totals)
   end
+  return Valuation.finalize(snapshot, goal, totals, #nodes)
+end
+
+-- Inlined rather than calling a shared per-field `cmp(a, b, higher)` helper:
+-- this runs on every pairwise comparison during `Frontier.best`'s sort
+-- (O(n log n) calls), so avoiding the extra function-call layer per field
+-- meaningfully reduces interpreter overhead in that hot path while producing
+-- identical results to the equivalent lower/higher-is-better comparisons.
+function Valuation.compare(left, right)
   if left.feasible ~= right.feasible then return left.feasible and 1 or -1 end
-  return cmp(left.survivalRisk, right.survivalRisk, false) ~= 0 and cmp(left.survivalRisk, right.survivalRisk, false)
-    or cmp(left.resourceMargin, right.resourceMargin, true) ~= 0 and cmp(left.resourceMargin, right.resourceMargin, true)
-    or cmp(left.buildGain, right.buildGain, true) ~= 0 and cmp(left.buildGain, right.buildGain, true)
-    or cmp(left.detour, right.detour, false) ~= 0 and cmp(left.detour, right.detour, false)
-    or cmp(left.time, right.time, false)
+  if left.survivalRisk ~= right.survivalRisk then
+    return left.survivalRisk < right.survivalRisk and 1 or -1
+  end
+  if left.resourceMargin ~= right.resourceMargin then
+    return left.resourceMargin > right.resourceMargin and 1 or -1
+  end
+  if left.buildGain ~= right.buildGain then
+    return left.buildGain > right.buildGain and 1 or -1
+  end
+  if left.detour ~= right.detour then
+    return left.detour < right.detour and 1 or -1
+  end
+  if left.time == right.time then return 0 end
+  return left.time < right.time and 1 or -1
 end
 
 return Valuation

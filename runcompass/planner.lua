@@ -4,6 +4,7 @@ local Milestones = require("runcompass.milestones")
 local Search = require("runcompass.search")
 local Valuation = require("runcompass.valuation")
 local ChoiceEngine = require("runcompass.choice_engine")
+local Frontier = require("runcompass.frontier")
 
 local SUPPORTED_MODES = { normal = true, hard = true }
 
@@ -189,18 +190,21 @@ function Planner.plan(snapshot, goal, previous, decisionModels)
     end
   end
   if #destinations == 0 and goal.frontier then
-    local current = roomMap[snapshot.currentRoom]
-    for _, door in ipairs(current and current.doors or {}) do
-      if isVisible(roomMap[door.to], snapshot.visibility or {}) then
-        return {
-          status = "explore",
-          nextDoorSlot = door.slot,
-          steps = { "Explore the revealed route", "Replan when the target branch appears" },
-          reasonCodes = { frontier_exploration = true, portal_uncertainty = milestone.reasonCodes.portal_uncertainty },
-          confidence = "low",
-          capabilityTier = capabilityTier(snapshot)
-        }
-      end
+    local candidate = Frontier.best(snapshot, goal)
+    if candidate then
+      local step = candidate.roomKind == "treasure" and "Take the treasure-room detour"
+        or candidate.roomKind == "shop" and "Check the worthwhile shop route"
+        or "Explore the best revealed frontier"
+      return {
+        status = "explore",
+        nextDoorSlot = candidate.doorSlot,
+        steps = { step, "Replan when the target branch appears" },
+        score = candidate.evaluation.utility,
+        scoreVector = candidate.evaluation,
+        reasonCodes = candidate.reasonCodes,
+        confidence = "low",
+        capabilityTier = capabilityTier(snapshot)
+      }
     end
   end
   local hiddenDestination = false
