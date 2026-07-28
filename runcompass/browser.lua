@@ -22,4 +22,26 @@ function Browser.filter(entries, filters)
   return result
 end
 
+local STATUS_LABELS = {
+  routable = "Eligible",
+  locked = "Locked",
+  already_unlocked = "Completed",
+  instructional_only = "Instructional",
+  catalog_update_required = "Update required",
+  unavailable_this_run = "Unavailable"
+}
+
+function Browser.category(entry)
+  if entry.kind == "boss" then return "boss_routes" end
+  if entry.completionMark then return "completion_marks" end
+  if entry.kind == "collectible" and entry.unlockMethod ~= "donation" and entry.unlockMethod ~= "special" then
+    return "item_unlocks"
+  end
+  return "special"
+end
+
+function Browser.statusLabel(status)
+  return STATUS_LABELS[status] or tostring(status or "Unknown")
+end
+
 return Browser
