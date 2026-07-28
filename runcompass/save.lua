@@ -1,5 +1,5 @@
 local Save = {}
-local CURRENT_SCHEMA = 3
+local CURRENT_SCHEMA = 4
 
 local function defaults()
   return {
@@ -9,8 +9,23 @@ local function defaults()
     hud = { scale = 1, x = 0, y = 0, visible = true },
     diagnostics = false,
     decision = { autoCompare = true, detailLevel = 2, showConfidence = true, showWarnings = true, eidDescriptions = true },
-    browser = { alphabet = "all", kind = "all", status = "all", character = "all", unlockMethod = "all", completionMark = "all" },
-    bindings = { keyboardGoal = 117, keyboardToggle = 118, controllerGoal = 10, controllerToggle = 13 }
+    browser = {
+      category = "boss_routes",
+      alphabet = "all",
+      kind = "all",
+      status = "all",
+      character = "all",
+      unlockMethod = "all",
+      completionMark = "all"
+    },
+    bindings = {
+      keyboardGoal = 117,
+      keyboardToggle = 118,
+      keyboardDetail = 119,
+      controllerGoal = 10,
+      controllerDetail = 11,
+      controllerToggle = 13
+    }
   }
 end
 

@@ -345,9 +345,28 @@ local function testHudUsesReadableFallbackWhenSelectedGoalIsMissing()
   assertTrue(string.find(text, "boss.mega_satan", 1, true) == nil, "fallback HUD target should not expose the internal id")
 end
 
-local tests = { testBuildsLiveCategoryCounts, testKeepsSelectedRowInPageWindow, testAdvancesPastInclusivePageEndpoint, testKeepsFinalSelectionInPersistedPageWindow, testResolvesSortedGoalDetails, testPreservesReadablePrerequisiteDetails, testFiltersCatalogStatusWhileShowingCurrentRunStatus, testExposesCategoryAndRowContract, testClampsOneBasedScrollForEmptyAndShortCategories, testShouldersChangeCategories, testControllerSelectsAbsoluteGoalAfterScrolling, testDpadMovesBetweenCategoryAndGoalPanes, testSearchPreservesSpacesAndPunctuation, testActionControllerNavigatesWithoutControllerTable, testActionConfirmWinsOverOpenBrowserBinding, testSearchEditResetsSelectionBeforeConfirmingNarrowedResult, testEmptyConfirmDoesNotCloseBrowser, testBrowserModelUsesLiveSnapshotWithoutMutatingFilters, testRenderTextUsesScaledTextArgumentOrder, testHudRendersSelectedGoalNameInsteadOfInternalId, testHudUsesReadableFallbackWhenSelectedGoalIsMissing }
+local function testHeldDetailBindingExpandsWithoutToggling()
+  local held = true
+  local ui = UI.new({
+    input = {
+      IsButtonTriggered = function() return false end,
+      IsButtonPressed = function(code) return held and code == 119 end
+    },
+    keyboard = {},
+    controller = {},
+    state = { bindings = { keyboardDetail = 119, controllerDetail = 11 }, browser = {}, hud = {}, decision = {} },
+    entries = {}
+  })
+  ui:input()
+  assertEqual(ui.detailHeld, true, "holding the detail key should expand the compact card")
+  held = false
+  ui:input()
+  assertEqual(ui.detailHeld, false, "releasing the key should restore compact mode")
+end
+
+local tests = { testBuildsLiveCategoryCounts, testKeepsSelectedRowInPageWindow, testAdvancesPastInclusivePageEndpoint, testKeepsFinalSelectionInPersistedPageWindow, testResolvesSortedGoalDetails, testPreservesReadablePrerequisiteDetails, testFiltersCatalogStatusWhileShowingCurrentRunStatus, testExposesCategoryAndRowContract, testClampsOneBasedScrollForEmptyAndShortCategories, testShouldersChangeCategories, testControllerSelectsAbsoluteGoalAfterScrolling, testDpadMovesBetweenCategoryAndGoalPanes, testSearchPreservesSpacesAndPunctuation, testActionControllerNavigatesWithoutControllerTable, testActionConfirmWinsOverOpenBrowserBinding, testSearchEditResetsSelectionBeforeConfirmingNarrowedResult, testEmptyConfirmDoesNotCloseBrowser, testBrowserModelUsesLiveSnapshotWithoutMutatingFilters, testRenderTextUsesScaledTextArgumentOrder, testHudRendersSelectedGoalNameInsteadOfInternalId, testHudUsesReadableFallbackWhenSelectedGoalIsMissing, testHeldDetailBindingExpandsWithoutToggling }
 for index, test in ipairs(tests) do
   test()
   print("navigation ok " .. index)
 end
-print("21 navigation UI tests passed")
+print(#tests .. " navigation UI tests passed")

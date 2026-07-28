@@ -329,7 +329,7 @@ end
 
 local function testSaveV3MigratesDecisionSettingsSafely()
   local saved = Save.migrate({ schemaVersion = 2, decision = { detailLevel = 99, autoCompare = false }, browser = { alphabet = "Z" } })
-  assertEqual(saved.schemaVersion, 3, "build-guide settings should use schema v3")
+  assertEqual(saved.schemaVersion, 4, "build-guide settings should migrate to the current schema")
   assertEqual(saved.decision.detailLevel, 3, "decision detail should be clamped")
   assertEqual(saved.decision.autoCompare, false, "decision setting should migrate")
   assertEqual(saved.browser.alphabet, "Z", "browser preferences should migrate")

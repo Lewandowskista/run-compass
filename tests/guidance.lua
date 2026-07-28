@@ -122,13 +122,25 @@ local function testCompactCardUsesStrongestReasonAndWarning()
   assertEqual(#view.warnings, 1, "compact card should preserve the strongest warning")
 end
 
+local function testRemovedChoiceCannotLeaveStaleMarker()
+  local value = snapshot()
+  value.visibleChoices = {
+    { id = "choice.1", roomId = 1, kind = "collectible", position = { x = 100, y = 100 }, observedIdentity = { id = 100, name = "Relic" }, eligibleActors = { "primary" } }
+  }
+  local first = Planner.plan(value, { id = "boss.mega_satan", destinationRooms = {}, frontier = true })
+  value.visibleChoices = {}
+  local second = Planner.plan(value, { id = "boss.mega_satan", destinationRooms = {}, frontier = true }, first)
+  assertTrue(not second.decision or not second.decision.primary, "removed entities must remove their marker decision")
+end
+
 local tests = {
   testRanksKnownTreasureFrontierAboveNormalFrontier,
   testPlannerExploreUsesRankedFrontier,
   testExploreRecommendationIncludesVisibleItemDecision,
   testExploreHysteresisKeepsValidEquivalentDoor,
   testDoorPositionUsesGameRoom,
-  testCompactCardUsesStrongestReasonAndWarning
+  testCompactCardUsesStrongestReasonAndWarning,
+  testRemovedChoiceCannotLeaveStaleMarker
 }
 
 for index, test in ipairs(tests) do test(); print("guidance ok " .. index) end

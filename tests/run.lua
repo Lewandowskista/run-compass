@@ -120,7 +120,7 @@ end
 
 local function testSaveMigrationUsesSafeDefaults()
   local migrated = Save.migrate({ schemaVersion = 0, selectedGoalId = "boss.delirium" })
-  assertEqual(migrated.schemaVersion, 3, "save data should be migrated")
+  assertEqual(migrated.schemaVersion, 4, "save data should be migrated")
   assertEqual(migrated.pinned, false, "missing fields should use safe defaults")
 end
 
@@ -129,6 +129,14 @@ local function testSaveRoundTripsLocalData()
   local decoded = Save.deserialize(encoded)
   assertEqual(decoded.selectedGoalId, "boss.delirium", "save serializer should preserve selected goal")
   assertEqual(decoded.pinned, true, "save serializer should preserve pin state")
+end
+
+local function testSaveV4AddsBrowserCategoryAndDetailBindings()
+  local migrated = Save.migrate({ schemaVersion = 3, browser = { status = "locked" }, bindings = { keyboardGoal = 117 } })
+  assertEqual(migrated.schemaVersion, 4, "guidance UI requires schema v4")
+  assertEqual(migrated.browser.category, "boss_routes", "migration should add the default category")
+  assertEqual(migrated.bindings.keyboardDetail, 119, "migration should add a detail key")
+  assertEqual(migrated.bindings.controllerDetail, 11, "migration should add a detail controller button")
 end
 
 local function testBlindCurseDoesNotValueHiddenPickup()
@@ -665,6 +673,7 @@ local tests = {
   testCapabilityDetectionProbesEnhancedFeaturesIndividually,
   testSaveMigrationUsesSafeDefaults,
   testSaveRoundTripsLocalData,
+  testSaveV4AddsBrowserCategoryAndDetailBindings,
   testBlindCurseDoesNotValueHiddenPickup,
   testControllerReplansOnlyWhenDirty,
   testSnapshotBuilderNormalizesRuntimeState,

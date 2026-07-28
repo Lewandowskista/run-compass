@@ -36,6 +36,14 @@ function MCM.register(state, onChanged)
   setting("General", "Toggle guidance", "KEYBIND_KEYBOARD", function() return "Toggle guidance: " .. bindingName(state.bindings.keyboardToggle, false) end, function() return state.bindings.keyboardToggle end, function(value) state.bindings.keyboardToggle = value end)
   setting("General", "Controller goal browser", "KEYBIND_CONTROLLER", function() return "Controller goal browser: " .. bindingName(state.bindings.controllerGoal, true) end, function() return state.bindings.controllerGoal end, function(value) state.bindings.controllerGoal = value end)
   setting("General", "Controller guidance", "KEYBIND_CONTROLLER", function() return "Controller guidance: " .. bindingName(state.bindings.controllerToggle, true) end, function() return state.bindings.controllerToggle end, function(value) state.bindings.controllerToggle = value end)
+  setting("General", "Guidance details", "KEYBIND_KEYBOARD",
+    function() return "Guidance details: " .. bindingName(state.bindings.keyboardDetail, false) end,
+    function() return state.bindings.keyboardDetail end,
+    function(value) state.bindings.keyboardDetail = value end)
+  setting("General", "Controller details", "KEYBIND_CONTROLLER",
+    function() return "Controller details: " .. bindingName(state.bindings.controllerDetail, true) end,
+    function() return state.bindings.controllerDetail end,
+    function(value) state.bindings.controllerDetail = value end)
   setting("HUD", "Enabled", "BOOLEAN", function() return "HUD: " .. (state.hud.visible and "On" or "Off") end, function() return state.hud.visible end, function(value) state.hud.visible = value end)
   setting("HUD", "Pinned", "BOOLEAN", function() return "Pinned: " .. (state.pinned and "On" or "Off") end, function() return state.pinned end, function(value) state.pinned = value end)
   setting("HUD", "Scale", "NUMBER", function() return "Scale: " .. tostring(state.hud.scale) end, function() return state.hud.scale end, function(value) state.hud.scale = value end)

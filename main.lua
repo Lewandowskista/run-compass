@@ -52,7 +52,14 @@ local function fingerprint(snapshot)
   local choiceSignature = {}
   for index, choice in ipairs(choices) do
     if index > 16 then break end
-    choiceSignature[#choiceSignature + 1] = table.concat({ tostring(choice.id), tostring(choice.price), tostring(choice.observedIdentity and choice.observedIdentity.id) }, ",")
+    choiceSignature[#choiceSignature + 1] = table.concat({
+      tostring(choice.id),
+      tostring(choice.price),
+      tostring(choice.observedIdentity and choice.observedIdentity.id),
+      tostring(choice.position and choice.position.x),
+      tostring(choice.position and choice.position.y),
+      tostring(choice.replacement and choice.replacement.id)
+    }, ",")
   end
   local inventorySignature = {}
   for id, count in pairs(build.collectibles or {}) do inventorySignature[#inventorySignature + 1] = tostring(id) .. "=" .. tostring(count) end
@@ -62,7 +69,13 @@ local function fingerprint(snapshot)
     tostring(snapshot.visibility.curseLost), tostring(player.health), tostring(player.keys), tostring(player.bombs),
     tostring(player.coins), tostring(#pickups), table.concat(pickupSignature, ";"), tostring(snapshot.mode.kind),
     tostring(snapshot.mode.difficulty), tostring(snapshot.floor and snapshot.floor.stage), tostring(snapshot.floor and snapshot.floor.stageType),
-    table.concat(inventorySignature, ";"), table.concat(choiceSignature, ";")
+    table.concat(inventorySignature, ";"), table.concat(choiceSignature, ";"),
+    tostring(state.selectedGoalId),
+    tostring(player.characterToken),
+    tostring(player.actorToken),
+    tostring(player.stats and player.stats.damage),
+    tostring(player.stats and player.stats.fireRate),
+    tostring(player.stats and player.stats.speed)
   }, ":")
 end
 

@@ -121,6 +121,10 @@ function UI:input()
   local input, keyboard, controller, buttonAction = self.env.input, self.env.keyboard, self.env.controller, self.env.buttonAction
   if not input then return end
   local state = self.env.state
+  local held = function(code)
+    return code ~= nil and input.IsButtonPressed and input.IsButtonPressed(code, 0)
+  end
+  self.detailHeld = held(state.bindings.keyboardDetail) or held(state.bindings.controllerDetail)
   local pressed = function(code) return code ~= nil and input.IsButtonTriggered and input.IsButtonTriggered(code, 0) end
   local actionPressed = function(name)
     local action = buttonAction and buttonAction[name]
