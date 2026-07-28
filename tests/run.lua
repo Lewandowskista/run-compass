@@ -11,6 +11,8 @@ local Browser = require("runcompass.browser")
 local Events = require("runcompass.events")
 local Goals = require("runcompass.goals")
 local Presentation = require("runcompass.presentation")
+local Rules = require("runcompass.rules")
+local GameAdapter = require("runcompass.game")
 
 local function assertEqual(actual, expected, message)
   if actual ~= expected then
@@ -209,6 +211,41 @@ local function testCompletedGoalStopsRouting()
   assertEqual(result.status, "complete", "already unlocked goals should stop route guidance")
 end
 
+local function testRouteCriticalCollectibleRuleResolvesToBoss()
+  local snapshot = baseSnapshot()
+  snapshot.player.characterToken = "isaac"
+  snapshot.rooms[3].kind = "mother"
+  local entry = { id = 631, name = "Meat Cleaver", kind = "collectible", status = "locked" }
+  for key, value in pairs(Rules.forAchievement(440)) do entry[key] = value end
+  local goal = Goals.resolve(entry, snapshot)
+  assertEqual(goal.destinationRooms[1], 3, "Meat Cleaver should route to Mother when playing Isaac")
+end
+
+local function testWrongCharacterRedirectsUnlockGoal()
+  local snapshot = baseSnapshot()
+  snapshot.player.characterToken = "cain"
+  local entry = { id = 631, name = "Meat Cleaver", kind = "collectible", status = "locked" }
+  for key, value in pairs(Rules.forAchievement(440)) do entry[key] = value end
+  local goal = Goals.resolve(entry, snapshot)
+  local result = Planner.plan(snapshot, goal)
+  assertEqual(result.status, "prerequisite_redirect", "wrong character should redirect instead of routing a false path")
+end
+
+local function testPersistentCounterGoalIsInstructionalWithoutEnhancedTier()
+  local snapshot = baseSnapshot()
+  local entry = { id = 175, name = "Dad's Key", kind = "collectible", status = "locked" }
+  for key, value in pairs(Rules.forAchievement(58)) do entry[key] = value end
+  local goal = Goals.resolve(entry, snapshot)
+  local result = Planner.plan(snapshot, goal)
+  assertEqual(result.status, "instructional", "persistent progress goals need the enhanced tier")
+end
+
+local function testBossRoomKindsUseBossIdEnum()
+  local adapter = GameAdapter.new({ bossType = { MOM = 6, MOMS_HEART = 8, SATAN = 24, ISAAC = 39 }, roomType = { ROOM_BOSS = 5 } })
+  local room = { GetBossID = function() return 24 end }
+  assertEqual(adapter:roomKind(5, 0, room), "satan", "BossID should normalize regular boss rooms")
+end
+
 local tests = {
   testRoutesToGoalThroughRevealedRooms,
   testNeverUsesHiddenSecretRoom,
@@ -228,7 +265,11 @@ local tests = {
   testGoalResolverFindsCurrentFloorBoss,
   testPresentationFormatsCompactRecommendation,
   testInstructionalGoalDoesNotPretendToRoute,
-  testCompletedGoalStopsRouting
+  testCompletedGoalStopsRouting,
+  testRouteCriticalCollectibleRuleResolvesToBoss,
+  testWrongCharacterRedirectsUnlockGoal,
+  testPersistentCounterGoalIsInstructionalWithoutEnhancedTier,
+  testBossRoomKindsUseBossIdEnum
 }
 
 for index, test in ipairs(tests) do

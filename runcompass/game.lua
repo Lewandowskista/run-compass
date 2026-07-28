@@ -43,7 +43,14 @@ function GameAdapter:roomKind(dataType, variant, currentRoom)
   if currentRoom and currentRoom.GetBossID then
     local boss = safe(nil, function() return currentRoom:GetBossID() end)
     if boss ~= nil then
-      local bossType = self.env.bossType or rawget(_G, "BossId") or {}
+      local bossType = self.env.bossType or rawget(_G, "BossID") or rawget(_G, "BossId") or {}
+      if boss == bossType.MOM then return "mom" end
+      if boss == bossType.MOMS_HEART or boss == bossType.MOM_HEART then return "mom_heart" end
+      if boss == bossType.ISAAC then return "isaac" end
+      if boss == bossType.SATAN then return "satan" end
+      if boss == bossType.BLUE_BABY then return "blue_baby" end
+      if boss == bossType.LAMB then return "lamb" end
+      if boss == bossType.BEAST then return "beast" end
       if boss == bossType.DELIRIUM then return "delirium" end
       if boss == bossType.HUSH then return "hush" end
       if boss == bossType.MOTHER then return "mother" end
@@ -143,11 +150,35 @@ function GameAdapter:build()
   for index = 0, count - 1 do
     local player = safe(nil, function() return game:GetPlayer(index) end)
     if player then
+      local playerType = player:GetPlayerType()
+      local playerTypes = self.env.playerType or rawget(_G, "PlayerType") or {}
+      local characterTokens = {}
+      local function addCharacter(constant, token)
+        if constant ~= nil then characterTokens[constant] = token end
+      end
+      addCharacter(playerTypes.PLAYER_ISAAC, "isaac"); addCharacter(playerTypes.PLAYER_MAGDALENA, "magdalene")
+      addCharacter(playerTypes.PLAYER_CAIN, "cain"); addCharacter(playerTypes.PLAYER_JUDAS, "judas")
+      addCharacter(playerTypes.PLAYER_BLUEBABY, "blue_baby"); addCharacter(playerTypes.PLAYER_EVE, "eve")
+      addCharacter(playerTypes.PLAYER_SAMSON, "samson"); addCharacter(playerTypes.PLAYER_AZAZEL, "azazel")
+      addCharacter(playerTypes.PLAYER_LAZARUS, "lazarus"); addCharacter(playerTypes.PLAYER_EDEN, "eden")
+      addCharacter(playerTypes.PLAYER_THELOST, "the_lost"); addCharacter(playerTypes.PLAYER_LILITH, "lilith")
+      addCharacter(playerTypes.PLAYER_KEEPER, "keeper"); addCharacter(playerTypes.PLAYER_APOLLYON, "apollyon")
+      addCharacter(playerTypes.PLAYER_THEFORGOTTEN, "the_forgotten"); addCharacter(playerTypes.PLAYER_BETHANY, "bethany")
+      addCharacter(playerTypes.PLAYER_JACOB, "jacob_and_esau"); addCharacter(playerTypes.PLAYER_ESAU, "jacob_and_esau")
+      addCharacter(playerTypes.PLAYER_ISAAC_B, "tainted_isaac"); addCharacter(playerTypes.PLAYER_MAGDALENA_B, "tainted_magdalene")
+      addCharacter(playerTypes.PLAYER_CAIN_B, "tainted_cain"); addCharacter(playerTypes.PLAYER_JUDAS_B, "tainted_judas")
+      addCharacter(playerTypes.PLAYER_BLUEBABY_B, "tainted_blue_baby"); addCharacter(playerTypes.PLAYER_EVE_B, "tainted_eve")
+      addCharacter(playerTypes.PLAYER_SAMSON_B, "tainted_samson"); addCharacter(playerTypes.PLAYER_AZAZEL_B, "tainted_azazel")
+      addCharacter(playerTypes.PLAYER_LAZARUS_B, "tainted_lazarus"); addCharacter(playerTypes.PLAYER_EDEN_B, "tainted_eden")
+      addCharacter(playerTypes.PLAYER_THELOST_B, "tainted_lost"); addCharacter(playerTypes.PLAYER_LILITH_B, "tainted_lilith")
+      addCharacter(playerTypes.PLAYER_KEEPER_B, "tainted_keeper"); addCharacter(playerTypes.PLAYER_APOLLYON_B, "tainted_apollyon")
+      addCharacter(playerTypes.PLAYER_THEFORGOTTEN_B, "tainted_forgotten"); addCharacter(playerTypes.PLAYER_BETHANY_B, "tainted_bethany")
+      addCharacter(playerTypes.PLAYER_JACOB_B, "tainted_jacob")
       players[#players + 1] = {
         health = (player:GetHearts() or 0) + (player:GetSoulHearts() or 0) + (player:GetBlackHearts() or 0),
         maxHealth = player:GetMaxHearts(),
         keys = player:GetNumKeys(), bombs = player:GetNumBombs(), coins = player:GetNumCoins(),
-        power = player.Damage or 0, playerType = player:GetPlayerType()
+        power = player.Damage or 0, playerType = playerType, characterToken = characterTokens[playerType]
       }
     end
   end

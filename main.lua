@@ -53,6 +53,7 @@ end
 local function refresh()
   if not adapter then return end
   local snapshot = adapter:build()
+  snapshot.capabilities = capabilities
   local nextFingerprint = fingerprint(snapshot)
   if lastSnapshot and nextFingerprint ~= lastSnapshot then controller:onEvent("PLAYER_STATE_CHANGED") end
   lastSnapshot = nextFingerprint
@@ -69,7 +70,8 @@ local function initialize()
     game = game,
     isaac = isaac,
     roomType = rawget(_G, "RoomType"),
-    bossType = rawget(_G, "BossId"),
+    bossType = rawget(_G, "BossID") or rawget(_G, "BossId"),
+    playerType = rawget(_G, "PlayerType"),
     entityType = rawget(_G, "EntityType"),
     levelCurse = rawget(_G, "LevelCurse"),
     collectibleType = rawget(_G, "CollectibleType"),

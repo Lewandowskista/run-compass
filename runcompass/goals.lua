@@ -39,6 +39,12 @@ function Goals.resolve(selected, snapshot)
     resolved.destinationRooms = {}
     return resolved
   end
+  if resolved.requiredCapability == "enhanced" and not (snapshot.capabilities and snapshot.capabilities.tier == "enhanced") then
+    resolved.status = "instructional"
+    resolved.frontier = false
+    resolved.destinationRooms = {}
+    return resolved
+  end
   if resolved.destinationRooms then return resolved end
   for _, definition in ipairs(BOSS_DEFINITIONS) do
     if definition.id == resolved.id then
@@ -47,6 +53,17 @@ function Goals.resolve(selected, snapshot)
     end
   end
   resolved.destinationRooms = {}
+  if resolved.requiredCharacterToken and (not snapshot.player or not snapshot.player.characterToken
+      or resolved.requiredCharacterToken ~= snapshot.player.characterToken) then
+    resolved.status = "prerequisite_redirect"
+    resolved.frontier = false
+    return resolved
+  end
+  if resolved.matchKinds then
+    local kinds = {}
+    for _, kind in ipairs(resolved.matchKinds) do kinds[kind] = true end
+    resolved.matcher = function(room) return kinds[room.kind] == true end
+  end
   if resolved.matcher then
     for _, room in ipairs(snapshot.rooms or {}) do
       if resolved.matcher(room) then resolved.destinationRooms[#resolved.destinationRooms + 1] = room.id end

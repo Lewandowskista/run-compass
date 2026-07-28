@@ -4,6 +4,8 @@ Run Compass is a fair-play route adviser for solo Normal and Hard runs in The Bi
 
 Select a target such as Delirium, Mother, The Beast, Mega Satan, or a vanilla collectible unlock. After rooms are clear, Run Compass highlights the next door and explains the next few steps. It reacts to room transitions, pickups, damage, purchases, inventory changes, resources, timers, and branch choices.
 
+The base catalog discovers every live collectible from `ItemConfig`. Route-critical unlock rules are versioned in `runcompass/rules.lua`; future or counter-based rules are deliberately labeled `catalog update required` or `Repentogon required` instead of being guessed.
+
 ## Dependencies
 
 - Mod Config Menu is the Workshop configuration dependency.

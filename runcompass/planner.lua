@@ -3,6 +3,10 @@ local Visibility = require("runcompass.visibility")
 
 local SUPPORTED_MODES = { normal = true, hard = true }
 
+local function capabilityTier(snapshot)
+  return snapshot and snapshot.capabilities and snapshot.capabilities.tier or "base"
+end
+
 local function copySet(values)
   local result = {}
   for _, value in ipairs(values or {}) do result[value] = true end
@@ -115,20 +119,26 @@ local function recommendationForPath(snapshot, roomMap, candidate)
       resource_reservation = next(candidate.cost) ~= nil
     },
     confidence = "medium",
-    capabilityTier = "base"
+    capabilityTier = capabilityTier(snapshot)
   }
 end
 
 function Planner.plan(snapshot, goal, previous)
   if goal.status == "instructional" then
-    return { status = "instructional", steps = { "Install the catalog update or use Repentogon for this goal" }, reasonCodes = { catalog_update_required = true }, confidence = "none", capabilityTier = "base" }
+    local reason = goal.requiredCapability == "enhanced" and "Install Repentogon 1.1.0+ to verify this goal" or "Install the catalog update before routing this goal"
+    return { status = "instructional", steps = { reason }, reasonCodes = { catalog_update_required = goal.requiredCapability ~= "enhanced", enhanced_required = goal.requiredCapability == "enhanced" }, confidence = "none", capabilityTier = capabilityTier(snapshot) }
+  end
+  if goal.status == "prerequisite_redirect" then
+    local character = snapshot.player and snapshot.player.characterToken
+    local step = character and ("Switch to " .. tostring(goal.requiredCharacterToken) .. " for this unlock") or "Character identity is unavailable; choose this goal in a compatible run"
+    return { status = "prerequisite_redirect", steps = { step }, reasonCodes = { prerequisite_character = true, character_unknown = character == nil }, confidence = "high", capabilityTier = capabilityTier(snapshot) }
   end
   if goal.status == "complete" then
-    return { status = "complete", steps = { "Goal already complete" }, reasonCodes = { goal_complete = true }, confidence = "high", capabilityTier = "base" }
+    return { status = "complete", steps = { "Goal already complete" }, reasonCodes = { goal_complete = true }, confidence = "high", capabilityTier = capabilityTier(snapshot) }
   end
   local mode = snapshot.mode or {}
   if not SUPPORTED_MODES[mode.kind] or mode.coOp or mode.progressionAllowed == false then
-    return { status = "inactive", steps = {}, reasonCodes = { unsupported_mode = true }, confidence = "none", capabilityTier = "base" }
+    return { status = "inactive", steps = {}, reasonCodes = { unsupported_mode = true }, confidence = "none", capabilityTier = capabilityTier(snapshot) }
   end
 
   local roomMap = buildRoomMap(snapshot.rooms)
@@ -143,7 +153,7 @@ function Planner.plan(snapshot, goal, previous)
           steps = { "Explore the revealed route", "Replan when the target branch appears" },
           reasonCodes = { frontier_exploration = true },
           confidence = "low",
-          capabilityTier = "base"
+          capabilityTier = capabilityTier(snapshot)
         }
       end
     end
@@ -157,7 +167,7 @@ function Planner.plan(snapshot, goal, previous)
   if #paths == 0 then
     local reasonCodes = { hidden_information = hiddenDestination }
     if (goal.requiredResources and next(goal.requiredResources)) then reasonCodes.resource_reservation = true end
-    return { status = "unreachable", steps = {}, reasonCodes = reasonCodes, confidence = "low", capabilityTier = "base" }
+    return { status = "unreachable", steps = {}, reasonCodes = reasonCodes, confidence = "low", capabilityTier = capabilityTier(snapshot) }
   end
 
   table.sort(paths, function(left, right) return left.score > right.score end)
