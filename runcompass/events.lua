@@ -10,6 +10,8 @@ function Events.normalized(controller)
     room = emit("ROOM_CHANGED"),
     pickup = emit("OBSERVATION_CHANGED"),
     player = emit("PLAYER_STATE_CHANGED"),
+    build = emit("PLAYER_STATE_CHANGED"),
+    entityRemoved = emit("OBSERVATION_CHANGED"),
     progress = emit("PROGRESS_CHANGED"),
     target = emit("TARGET_CHANGED")
   }

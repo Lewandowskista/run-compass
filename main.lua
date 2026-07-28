@@ -12,6 +12,10 @@ local Events = require("runcompass.events")
 local MCM = require("runcompass.mcm")
 local UI = require("runcompass.ui")
 local Runtime = require("runcompass.runtime")
+local ItemModels = require("runcompass.item_models")
+local GuideData = require("runcompass.guide_data")
+local GuideAPI = require("runcompass.guide_api")
+local EID = require("runcompass.eid")
 
 local game = Game()
 local isaac = Isaac
@@ -22,6 +26,9 @@ local controller = Controller.new(Planner)
 local ui
 local adapter
 local runtime
+local decisionModels
+local RunCompassAPI
+local eid
 
 local function output(message)
   if isaac and isaac.ConsoleOutput then isaac.ConsoleOutput("[Run Compass] " .. message .. "\n") end
@@ -35,16 +42,27 @@ end
 local function fingerprint(snapshot)
   local player = snapshot.player or {}
   local pickups = snapshot.observations and snapshot.observations.pickups or {}
+  local build = snapshot.buildState or {}
+  local choices = snapshot.visibleChoices or {}
   local pickupSignature = {}
   for index, pickup in ipairs(pickups) do
     if index > 12 then break end
     pickupSignature[#pickupSignature + 1] = table.concat({ tostring(pickup.category), tostring(pickup.subtype), tostring(pickup.quality) }, ",")
   end
+  local choiceSignature = {}
+  for index, choice in ipairs(choices) do
+    if index > 16 then break end
+    choiceSignature[#choiceSignature + 1] = table.concat({ tostring(choice.id), tostring(choice.price), tostring(choice.observedIdentity and choice.observedIdentity.id) }, ",")
+  end
+  local inventorySignature = {}
+  for id, count in pairs(build.collectibles or {}) do inventorySignature[#inventorySignature + 1] = tostring(id) .. "=" .. tostring(count) end
+  table.sort(inventorySignature)
   return table.concat({
     tostring(snapshot.currentRoom), tostring(snapshot.currentRoomClear), tostring(snapshot.visibility.curseBlind),
     tostring(snapshot.visibility.curseLost), tostring(player.health), tostring(player.keys), tostring(player.bombs),
     tostring(player.coins), tostring(#pickups), table.concat(pickupSignature, ";"), tostring(snapshot.mode.kind),
-    tostring(snapshot.mode.difficulty), tostring(snapshot.floor and snapshot.floor.stage), tostring(snapshot.floor and snapshot.floor.stageType)
+    tostring(snapshot.mode.difficulty), tostring(snapshot.floor and snapshot.floor.stage), tostring(snapshot.floor and snapshot.floor.stageType),
+    table.concat(inventorySignature, ";"), table.concat(choiceSignature, ";")
   }, ":")
 end
 
@@ -74,9 +92,22 @@ local function initialize()
     entityType = rawget(_G, "EntityType"),
     levelCurse = rawget(_G, "LevelCurse"),
     collectibleType = rawget(_G, "CollectibleType"),
-    pickupVariant = rawget(_G, "PickupVariant"), itemConfig = itemConfig, capabilities = capabilities
+    pickupVariant = rawget(_G, "PickupVariant"), itemConfig = itemConfig, capabilities = capabilities,
+    itemPool = game.GetItemPool and game:GetItemPool() or nil
   })
-  catalog = Catalog.new(itemConfig and adapter:collectItems(itemConfig) or {}, Rules.unlocks, Rules)
+  local itemEntries = itemConfig and adapter:collectItems(itemConfig) or {}
+  local modelEntries = {}
+  for _, entry in ipairs(itemEntries) do modelEntries[#modelEntries + 1] = entry end
+  local trinketType, cardType, pillColor = rawget(_G, "TrinketType") or {}, rawget(_G, "Card") or {}, rawget(_G, "PillColor") or {}
+  for _, entry in ipairs(adapter:collectConfigured("trinket", trinketType.NUM_TRINKETS or 200)) do modelEntries[#modelEntries + 1] = entry end
+  for _, entry in ipairs(adapter:collectConfigured("card", cardType.NUM_CARDS or 500)) do modelEntries[#modelEntries + 1] = entry end
+  for _, entry in ipairs(adapter:collectConfigured("pill", pillColor.NUM_PILLS or 20)) do modelEntries[#modelEntries + 1] = entry end
+  catalog = Catalog.new(itemEntries, Rules.unlocks, Rules)
+  decisionModels = ItemModels.fromCatalog(modelEntries, GuideData.items)
+  eid = EID.detect(rawget(_G, "EID"))
+  RunCompassAPI = GuideAPI.new(decisionModels)
+  for characterToken, profile in pairs(GuideData.characterProfiles) do RunCompassAPI:RegisterCharacterProfile("run-compass", characterToken, profile) end
+  rawset(_G, "RunCompassAPI", RunCompassAPI)
   for _, boss in ipairs(Goals.bosses()) do catalog:add(boss) end
   if not state.selectedGoalId then state.selectedGoalId = "boss.delirium" end
   ui = UI.new({
@@ -102,9 +133,12 @@ local function initialize()
     fingerprint = fingerprint,
     output = output,
     capabilities = capabilities,
+    decisionModels = decisionModels,
+    eid = eid,
     ui = ui
   })
-  output("Loaded base tier" .. (capabilities.tier == "enhanced" and " with Repentogon " .. tostring(capabilities.repentogonVersion) or "."))
+  local modelReport = decisionModels:validate((function() local ids = {}; for _, entry in ipairs(modelEntries) do ids[#ids + 1] = { id = entry.id, kind = entry.kind or "collectible" } end; return ids end)())
+  output("Loaded base tier" .. (capabilities.tier == "enhanced" and " with Repentogon " .. tostring(capabilities.repentogonVersion) or ".") .. " build models=" .. tostring(modelReport.modeled) .. "/" .. tostring(modelReport.total) .. ", EID=" .. (eid.available and "available" or "missing"))
 end
 
 local normalized = Events.normalized(controller)
@@ -139,3 +173,5 @@ addCallback("MC_POST_COMPLETION_MARK_GET", normalized.progress)
 addCallback("MC_POST_ACHIEVEMENT_UNLOCK", normalized.progress)
 addCallback("MC_POST_PLAYER_COLLECTIBLE_ADDED", normalized.player)
 addCallback("MC_POST_PLAYER_COLLECTIBLE_REMOVED", normalized.player)
+addCallback("MC_POST_TRIGGER_COLLECTIBLE_ADDED", normalized.build)
+addCallback("MC_POST_ENTITY_REMOVE", normalized.entityRemoved)

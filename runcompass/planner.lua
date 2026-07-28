@@ -3,6 +3,7 @@ local Visibility = require("runcompass.visibility")
 local Milestones = require("runcompass.milestones")
 local Search = require("runcompass.search")
 local Valuation = require("runcompass.valuation")
+local ChoiceEngine = require("runcompass.choice_engine")
 
 local SUPPORTED_MODES = { normal = true, hard = true }
 
@@ -147,7 +148,7 @@ local function recommendationForPath(snapshot, roomMap, candidate)
   }
 end
 
-function Planner.plan(snapshot, goal, previous)
+function Planner.plan(snapshot, goal, previous, decisionModels)
   if goal.status == "instructional" then
     local reason = goal.requiredCapability == "enhanced" and "Install Repentogon 1.1.0+ to verify this goal" or goal.status == "instructional_only" and "Follow the unlock instructions before routing this goal" or "Install the catalog update before routing this goal"
     return { status = "instructional", steps = { reason }, reasonCodes = { catalog_update_required = goal.classification == "catalog_update_required", instructional_only = goal.classification == "instructional_only", enhanced_required = goal.requiredCapability == "enhanced" }, confidence = "none", capabilityTier = capabilityTier(snapshot) }
@@ -242,6 +243,13 @@ function Planner.plan(snapshot, goal, previous)
     return left.score > right.score
   end)
   local recommendation = recommendationForPath(snapshot, roomMap, paths[1])
+  local visibleChoices = {}
+  for _, choice in ipairs(snapshot.visibleChoices or {}) do
+    if choice.roomId == snapshot.currentRoom then visibleChoices[#visibleChoices + 1] = choice end
+  end
+  if #visibleChoices > 0 then
+    recommendation.decision = ChoiceEngine.evaluate(snapshot, visibleChoices, goal, decisionModels or snapshot.decisionModels, snapshot.eid)
+  end
   for code, enabled in pairs(milestone.reasonCodes or {}) do recommendation.reasonCodes[code] = enabled end
   if next(milestone.requiredItems) then recommendation.reasonCodes.required_quest_items = true end
   if keepPrevious(snapshot, previous, recommendation) then

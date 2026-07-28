@@ -1,5 +1,5 @@
 local Save = {}
-local CURRENT_SCHEMA = 2
+local CURRENT_SCHEMA = 3
 
 local function defaults()
   return {
@@ -8,6 +8,8 @@ local function defaults()
     pinned = false,
     hud = { scale = 1, x = 0, y = 0, visible = true },
     diagnostics = false,
+    decision = { autoCompare = true, detailLevel = 2, showConfidence = true, showWarnings = true, eidDescriptions = true },
+    browser = { alphabet = "all", kind = "all", status = "all", character = "all", unlockMethod = "all", completionMark = "all" },
     bindings = { keyboardGoal = 117, keyboardToggle = 118, controllerGoal = 10, controllerToggle = 13 }
   }
 end
@@ -31,6 +33,15 @@ function Save.migrate(data)
   if result.pinned == nil then result.pinned = false end
   result.pinned = result.pinned == true
   result.diagnostics = result.diagnostics == true
+  local defaultDecision, defaultBrowser = defaults().decision, defaults().browser
+  result.decision = result.decision or {}
+  result.decision.autoCompare = result.decision.autoCompare ~= false
+  result.decision.detailLevel = math.max(1, math.min(3, math.floor(tonumber(result.decision.detailLevel) or defaultDecision.detailLevel)))
+  result.decision.showConfidence = result.decision.showConfidence ~= false
+  result.decision.showWarnings = result.decision.showWarnings ~= false
+  result.decision.eidDescriptions = result.decision.eidDescriptions ~= false
+  result.browser = result.browser or {}
+  for key, value in pairs(defaultBrowser) do if result.browser[key] == nil then result.browser[key] = value end end
   return result
 end
 

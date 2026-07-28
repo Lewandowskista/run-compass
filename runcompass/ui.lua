@@ -101,7 +101,7 @@ function UI:render(snapshot, recommendation)
   end
   if not recommendation or not self.env.state.hud.visible then return end
   if not self.env.state.pinned and snapshot.currentRoomClear == false then return end
-  local lines = Presentation.lines(recommendation)
+  local lines = Presentation.lines(recommendation, self.env.state.decision)
   local selected = self.env.state.selectedGoalId and self.env.state.selectedGoalId or "Delirium"
   isaac.RenderText(Strings.get("hud.target", selected), 20 + (self.env.state.hud.x or 0), 18 + (self.env.state.hud.y or 0), 0.8 * (self.env.state.hud.scale or 1), 0.8, 0.9, 1)
   for index, line in ipairs(lines) do
@@ -118,6 +118,10 @@ function UI:render(snapshot, recommendation)
       end
     end
     isaac.RenderText("→", x, y, 0.4 * (self.env.state.hud.scale or 1), 1, 0.4, 1)
+  end
+  if recommendation.decision and recommendation.decision.primary and recommendation.decision.primary.position and (not self.env.state.decision or self.env.state.decision.autoCompare ~= false) then
+    local position = recommendation.decision.primary.position
+    isaac.RenderText("◆", position.x or 0, position.y or 0, 0.5 * (self.env.state.hud.scale or 1), 0.9, 0.8, 0.2)
   end
 end
 
