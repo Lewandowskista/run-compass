@@ -276,7 +276,8 @@ function UI:render(snapshot, recommendation)
   if not recommendation or not self.env.state.hud.visible then return end
   if not self.env.state.pinned and snapshot.currentRoomClear == false then return end
   local lines = Presentation.lines(recommendation, self.env.state.decision)
-  local selected = self.env.state.selectedGoalId and self.env.state.selectedGoalId or "Delirium"
+  local selectedGoal = type(self.env.getSelectedGoal) == "function" and self.env.getSelectedGoal() or nil
+  local selected = selectedGoal and selectedGoal.name or Strings.get("hud.unknownGoal")
   renderText(isaac, Strings.get("hud.target", selected), 20 + (self.env.state.hud.x or 0), 18 + (self.env.state.hud.y or 0), 0.8 * (self.env.state.hud.scale or 1), { 0.8, 0.8, 0.9, 1 })
   for index, line in ipairs(lines) do renderText(isaac, line, 20, 30 + index * 12, 1, { 0.9, 0.65, 1, 1 }) end
   if recommendation.nextDoorSlot ~= nil then

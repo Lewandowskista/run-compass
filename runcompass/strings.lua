@@ -2,6 +2,7 @@ local Strings = {
   hud = {
     installMcm = "Run Compass: install Mod Config Menu for settings",
     target = "Target: %s",
+    unknownGoal = "Unknown goal",
     confidence = "%s confidence / %s tier",
     inactive = "Guidance unavailable in this run mode",
     unreachable = "Target is unreachable this run",

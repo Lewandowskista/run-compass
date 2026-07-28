@@ -11,6 +11,10 @@ local function assertTrue(value, message)
   if not value then error(message or "expected truthy value") end
 end
 
+local function assertContains(text, expected, message)
+  assertTrue(string.find(text, expected, 1, true) ~= nil, message or ("expected '" .. expected .. "' in '" .. text .. "'"))
+end
+
 local function entries()
   local result = {
     { id = "boss.mega_satan", name = "Mega Satan", kind = "boss", status = "routable" },
@@ -57,6 +61,16 @@ local function testResolvesSortedGoalDetails()
   assertEqual(model.details.lines[2], "Character: Any", "details should provide a default character line")
   assertEqual(model.details.lines[3], "Difficulty: Normal / Hard", "details should provide a default difficulty line")
   assertEqual(model.details.lines[4], "Method: Boss route", "boss details should provide the default method")
+end
+
+local function testPreservesReadablePrerequisiteDetails()
+  local catalogEntries = entries()
+  catalogEntries[1].prerequisites = { "Defeat Mom", { name = "Complete a Hard run" } }
+  local model = BrowserModel.build(catalogEntries, {}, { category = "boss_routes", selectedIndex = 18 }, 10)
+  assertEqual(#model.details.prerequisites, 2, "details should preserve every prerequisite")
+  local lines = table.concat(model.details.lines, "\n")
+  assertContains(lines, "Defeat Mom", "details should render the first prerequisite readably")
+  assertContains(lines, "Complete a Hard run", "details should render the second prerequisite readably")
 end
 
 local function testFiltersCatalogStatusWhileShowingCurrentRunStatus()
@@ -293,9 +307,47 @@ local function testRenderTextUsesScaledTextArgumentOrder()
   assertEqual(scaled[1][7], 0.78, "scaled text should receive the title green color after scales")
 end
 
-local tests = { testBuildsLiveCategoryCounts, testKeepsSelectedRowInPageWindow, testAdvancesPastInclusivePageEndpoint, testKeepsFinalSelectionInPersistedPageWindow, testResolvesSortedGoalDetails, testFiltersCatalogStatusWhileShowingCurrentRunStatus, testExposesCategoryAndRowContract, testClampsOneBasedScrollForEmptyAndShortCategories, testShouldersChangeCategories, testControllerSelectsAbsoluteGoalAfterScrolling, testDpadMovesBetweenCategoryAndGoalPanes, testSearchPreservesSpacesAndPunctuation, testActionControllerNavigatesWithoutControllerTable, testActionConfirmWinsOverOpenBrowserBinding, testSearchEditResetsSelectionBeforeConfirmingNarrowedResult, testEmptyConfirmDoesNotCloseBrowser, testBrowserModelUsesLiveSnapshotWithoutMutatingFilters, testRenderTextUsesScaledTextArgumentOrder }
+local function testHudRendersSelectedGoalNameInsteadOfInternalId()
+  local scaled = {}
+  local ui = UI.new({
+    isaac = { RenderScaledText = function(...) scaled[#scaled + 1] = { ... } end },
+    getSelectedGoal = function() return { id = "boss.mega_satan", name = "Mega Satan" } end,
+    state = {
+      selectedGoalId = "boss.mega_satan",
+      bindings = {}, browser = {}, hud = { visible = true }, pinned = false
+    },
+    entries = entries()
+  })
+  ui:render({ currentRoomClear = true }, { status = "ok", steps = { "Explore" } })
+  local rendered = {}
+  for _, call in ipairs(scaled) do rendered[#rendered + 1] = call[1] end
+  local text = table.concat(rendered, "\n")
+  assertContains(text, "Mega Satan", "HUD should render the selected goal name")
+  assertTrue(string.find(text, "boss.mega_satan", 1, true) == nil, "HUD should never render the internal selected goal id")
+end
+
+local function testHudUsesReadableFallbackWhenSelectedGoalIsMissing()
+  local scaled = {}
+  local ui = UI.new({
+    isaac = { RenderScaledText = function(...) scaled[#scaled + 1] = { ... } end },
+    getSelectedGoal = function() return nil end,
+    state = {
+      selectedGoalId = "boss.mega_satan",
+      bindings = {}, browser = {}, hud = { visible = true }, pinned = false
+    },
+    entries = entries()
+  })
+  ui:render({ currentRoomClear = true }, { status = "ok", steps = { "Explore" } })
+  local rendered = {}
+  for _, call in ipairs(scaled) do rendered[#rendered + 1] = call[1] end
+  local text = table.concat(rendered, "\n")
+  assertContains(text, "Unknown goal", "HUD should use a readable fallback target")
+  assertTrue(string.find(text, "boss.mega_satan", 1, true) == nil, "fallback HUD target should not expose the internal id")
+end
+
+local tests = { testBuildsLiveCategoryCounts, testKeepsSelectedRowInPageWindow, testAdvancesPastInclusivePageEndpoint, testKeepsFinalSelectionInPersistedPageWindow, testResolvesSortedGoalDetails, testPreservesReadablePrerequisiteDetails, testFiltersCatalogStatusWhileShowingCurrentRunStatus, testExposesCategoryAndRowContract, testClampsOneBasedScrollForEmptyAndShortCategories, testShouldersChangeCategories, testControllerSelectsAbsoluteGoalAfterScrolling, testDpadMovesBetweenCategoryAndGoalPanes, testSearchPreservesSpacesAndPunctuation, testActionControllerNavigatesWithoutControllerTable, testActionConfirmWinsOverOpenBrowserBinding, testSearchEditResetsSelectionBeforeConfirmingNarrowedResult, testEmptyConfirmDoesNotCloseBrowser, testBrowserModelUsesLiveSnapshotWithoutMutatingFilters, testRenderTextUsesScaledTextArgumentOrder, testHudRendersSelectedGoalNameInsteadOfInternalId, testHudUsesReadableFallbackWhenSelectedGoalIsMissing }
 for index, test in ipairs(tests) do
   test()
   print("navigation ok " .. index)
 end
-print("18 navigation UI tests passed")
+print("21 navigation UI tests passed")
