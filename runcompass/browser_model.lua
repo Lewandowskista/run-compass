@@ -64,10 +64,13 @@ end
 function BrowserModel.build(entries, snapshot, state, pageSize)
   snapshot = snapshot or {}
   state = state or {}
-  pageSize = pageSize or 10
+  pageSize = math.max(1, tonumber(pageSize) or 10)
   local resolvedEntries = {}
   for _, entry in ipairs(entries or {}) do
-    resolvedEntries[#resolvedEntries + 1] = Goals.resolve(entry, snapshot)
+    local resolved = Goals.resolve(entry, snapshot)
+    resolved.currentRunStatus = resolved.status
+    resolved.status = entry.status or resolved.status
+    resolvedEntries[#resolvedEntries + 1] = resolved
   end
   local filteredEntries = Browser.filter(resolvedEntries, state.filters or {})
   local byCategory = {}
@@ -80,7 +83,7 @@ function BrowserModel.build(entries, snapshot, state, pageSize)
   for _, definition in ipairs(CATEGORY_DEFINITIONS) do
     local goals = byCategory[definition.id]
     sortGoals(goals)
-    categories[#categories + 1] = { id = definition.id, name = definition.name, count = #goals }
+    categories[#categories + 1] = { id = definition.id, name = definition.name, label = definition.name, count = #goals }
   end
   local activeCategory = state.category or CATEGORY_DEFINITIONS[1].id
   if not byCategory[activeCategory] then activeCategory = CATEGORY_DEFINITIONS[1].id end
@@ -89,16 +92,19 @@ function BrowserModel.build(entries, snapshot, state, pageSize)
   if #goals == 0 then selectedIndex = 0
   elseif selectedIndex < 1 then selectedIndex = 1
   elseif selectedIndex > #goals then selectedIndex = #goals end
-  local maxScroll = math.max(0, #goals - pageSize + 1)
-  local scrollOffset = tonumber(state.scrollOffset) or 0
-  if scrollOffset < 0 then scrollOffset = 0 elseif scrollOffset > maxScroll then scrollOffset = maxScroll end
+  local maxScroll = math.max(1, #goals - pageSize + 1)
+  local scrollOffset = tonumber(state.scrollOffset) or 1
+  if scrollOffset < 1 then scrollOffset = 1 elseif scrollOffset > maxScroll then scrollOffset = maxScroll end
   if selectedIndex > 0 and selectedIndex < scrollOffset then scrollOffset = selectedIndex end
   if selectedIndex > scrollOffset + pageSize - 1 then scrollOffset = selectedIndex - pageSize + 1 end
   local rows = {}
-  local firstRowIndex = scrollOffset == 0 and 1 or scrollOffset
+  local firstRowIndex = scrollOffset
   for index = firstRowIndex, math.min(#goals, firstRowIndex + pageSize - 1) do
     local row = copy(goals[index])
     row.absoluteIndex = index
+    row.statusLabel = Browser.statusLabel(row.status)
+    row.selected = row.absoluteIndex == selectedIndex
+    row.entry = goals[index]
     rows[#rows + 1] = row
   end
   return {

@@ -26,9 +26,13 @@ local STATUS_LABELS = {
   routable = "Eligible",
   locked = "Locked",
   already_unlocked = "Completed",
+  complete = "Completed",
   instructional_only = "Instructional",
+  instructional = "Instructional",
   catalog_update_required = "Update required",
-  unavailable_this_run = "Unavailable"
+  unavailable_this_run = "Unavailable",
+  prerequisite_redirect = "Prerequisite required",
+  milestone = "Milestone"
 }
 
 function Browser.category(entry)
