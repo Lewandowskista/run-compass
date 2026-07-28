@@ -1,0 +1,41 @@
+local MCM = {}
+
+function MCM.register(state, onChanged)
+  local menu = rawget(_G, "ModConfigMenu") or rawget(_G, "MCM")
+  if type(menu) ~= "table" or type(menu.AddSetting) ~= "function" then return false end
+  local optionType = menu.OptionType or {}
+  local function setting(category, name, kind, display, current, change, info)
+    local config = {
+      Type = optionType[kind],
+      CurrentSetting = current,
+      Display = display,
+      OnChange = function(value) change(value); if onChanged then onChanged() end end,
+      Info = info or {}
+    }
+    if kind == "NUMBER" then config.Minimum = 0.5; config.Maximum = 2; config.ModifyBy = 0.1 end
+    pcall(menu.AddSetting, "Run Compass", category, {
+      Type = config.Type,
+      CurrentSetting = config.CurrentSetting,
+      Display = config.Display,
+      OnChange = config.OnChange,
+      Info = config.Info,
+      Minimum = config.Minimum,
+      Maximum = config.Maximum,
+      ModifyBy = config.ModifyBy
+    })
+  end
+  setting("General", "Goal browser", "KEYBIND_KEYBOARD", function() return "Goal browser: " .. tostring(state.bindings.keyboardGoal) end, function() return state.bindings.keyboardGoal end, function(value) state.bindings.keyboardGoal = value end)
+  setting("General", "Toggle guidance", "KEYBIND_KEYBOARD", function() return "Toggle guidance: " .. tostring(state.bindings.keyboardToggle) end, function() return state.bindings.keyboardToggle end, function(value) state.bindings.keyboardToggle = value end)
+  setting("General", "Controller goal browser", "KEYBIND_CONTROLLER", function() return "Controller goal browser: " .. tostring(state.bindings.controllerGoal) end, function() return state.bindings.controllerGoal end, function(value) state.bindings.controllerGoal = value end)
+  setting("General", "Controller guidance", "KEYBIND_CONTROLLER", function() return "Controller guidance: " .. tostring(state.bindings.controllerToggle) end, function() return state.bindings.controllerToggle end, function(value) state.bindings.controllerToggle = value end)
+  setting("HUD", "Enabled", "BOOLEAN", function() return "HUD: " .. (state.hud.visible and "On" or "Off") end, function() return state.hud.visible end, function(value) state.hud.visible = value end)
+  setting("HUD", "Pinned", "BOOLEAN", function() return "Pinned: " .. (state.pinned and "On" or "Off") end, function() return state.pinned end, function(value) state.pinned = value end)
+  setting("HUD", "Scale", "NUMBER", function() return "Scale: " .. tostring(state.hud.scale) end, function() return state.hud.scale end, function(value) state.hud.scale = value end)
+  if type(menu.AddText) == "function" then
+    pcall(menu.AddText, "Run Compass", "Info", function() return "Run Compass [REP+]" end)
+    pcall(menu.AddText, "Run Compass", "Info", function() return "MCM config active; Repentogon enables enhanced progress tracking." end)
+  end
+  return true
+end
+
+return MCM
