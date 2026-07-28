@@ -1,0 +1,9 @@
+.worktrees/
+.tools/
+dist/
+build/
+deploy/
+*.log
+*.tmp
+node_modules/
+
