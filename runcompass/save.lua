@@ -19,9 +19,9 @@ local function defaults()
       completionMark = "all"
     },
     bindings = {
-      keyboardGoal = 117,
-      keyboardToggle = 118,
-      keyboardDetail = 119,
+      keyboardGoal = 295,
+      keyboardToggle = 296,
+      keyboardDetail = 297,
       controllerGoal = 10,
       controllerDetail = 11,
       controllerToggle = 13
@@ -44,6 +44,12 @@ function Save.migrate(data)
   for key, value in pairs(defaultBindings) do
     if result.bindings[key] == nil then result.bindings[key] = value end
     result.bindings[key] = tonumber(result.bindings[key]) or value
+  end
+  -- 117-119 shipped as keyboard defaults but are not GLFW keycodes, so they can
+  -- never trigger; remapping them to F6/F7/F8 cannot clobber a real assignment
+  local legacyKeyRemap = { [117] = 295, [118] = 296, [119] = 297 }
+  for _, key in ipairs({ "keyboardGoal", "keyboardToggle", "keyboardDetail" }) do
+    result.bindings[key] = legacyKeyRemap[result.bindings[key]] or result.bindings[key]
   end
   if result.pinned == nil then result.pinned = false end
   result.pinned = result.pinned == true

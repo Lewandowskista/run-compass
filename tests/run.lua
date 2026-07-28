@@ -135,8 +135,24 @@ local function testSaveV4AddsBrowserCategoryAndDetailBindings()
   local migrated = Save.migrate({ schemaVersion = 3, browser = { status = "locked" }, bindings = { keyboardGoal = 117 } })
   assertEqual(migrated.schemaVersion, 4, "guidance UI requires schema v4")
   assertEqual(migrated.browser.category, "boss_routes", "migration should add the default category")
-  assertEqual(migrated.bindings.keyboardDetail, 119, "migration should add a detail key")
+  assertEqual(migrated.bindings.keyboardDetail, 297, "migration should add a detail key")
   assertEqual(migrated.bindings.controllerDetail, 11, "migration should add a detail controller button")
+end
+
+local function testKeyboardBindingsAreRealKeycodes()
+  -- GLFW (Isaac's Keyboard enum) has no keys 117-119; legacy defaults could never trigger
+  local fresh = Save.migrate(nil)
+  assertEqual(fresh.bindings.keyboardGoal, 295, "default goal key should be a real keycode (F6)")
+  assertEqual(fresh.bindings.keyboardToggle, 296, "default toggle key should be a real keycode (F7)")
+  assertEqual(fresh.bindings.keyboardDetail, 297, "default detail key should be a real keycode (F8)")
+  local legacy = Save.migrate({ schemaVersion = 4, bindings = { keyboardGoal = 117, keyboardToggle = 118, keyboardDetail = 119 } })
+  assertEqual(legacy.bindings.keyboardGoal, 295, "unusable legacy goal code must remap to F6")
+  assertEqual(legacy.bindings.keyboardToggle, 296, "unusable legacy toggle code must remap to F7")
+  assertEqual(legacy.bindings.keyboardDetail, 297, "unusable legacy detail code must remap to F8")
+  local assigned = Save.migrate({ schemaVersion = 4, bindings = { keyboardGoal = 71, keyboardToggle = 72, keyboardDetail = 73 } })
+  assertEqual(assigned.bindings.keyboardGoal, 71, "user-assigned keys must survive migration")
+  assertEqual(assigned.bindings.keyboardToggle, 72, "user-assigned keys must survive migration")
+  assertEqual(assigned.bindings.keyboardDetail, 73, "user-assigned keys must survive migration")
 end
 
 local function testBlindCurseDoesNotValueHiddenPickup()
@@ -674,6 +690,7 @@ local tests = {
   testSaveMigrationUsesSafeDefaults,
   testSaveRoundTripsLocalData,
   testSaveV4AddsBrowserCategoryAndDetailBindings,
+  testKeyboardBindingsAreRealKeycodes,
   testBlindCurseDoesNotValueHiddenPickup,
   testControllerReplansOnlyWhenDirty,
   testSnapshotBuilderNormalizesRuntimeState,

@@ -131,14 +131,19 @@ function UI:input()
   local input, keyboard, controller, buttonAction = self.env.input, self.env.keyboard, self.env.controller, self.env.buttonAction
   if not input then return end
   local state = self.env.state
-  local held = function(code)
-    return code ~= nil and input.IsButtonPressed and input.IsButtonPressed(code, 0)
+  -- Device 0 is the keyboard; gamepads occupy indices 1+ — poll them all
+  local anyDevice = function(query, code)
+    if code == nil or type(query) ~= "function" then return false end
+    for deviceIndex = 0, 3 do
+      if query(code, deviceIndex) then return true end
+    end
+    return false
   end
+  local held = function(code) return anyDevice(input.IsButtonPressed, code) end
   self.detailHeld = held(state.bindings.keyboardDetail) or held(state.bindings.controllerDetail)
-  local pressed = function(code) return code ~= nil and input.IsButtonTriggered and input.IsButtonTriggered(code, 0) end
+  local pressed = function(code) return anyDevice(input.IsButtonTriggered, code) end
   local actionPressed = function(name)
-    local action = buttonAction and buttonAction[name]
-    return action ~= nil and input.IsActionTriggered and input.IsActionTriggered(action, 0)
+    return anyDevice(input.IsActionTriggered, buttonAction and buttonAction[name])
   end
 
   if pressed(state.bindings.keyboardGoal) then self:toggleBrowser(); return end

@@ -284,6 +284,37 @@ local function testBrowserModelUsesLiveSnapshotWithoutMutatingFilters()
   assertEqual(ui.browserState.filters.query, "Saved", "building a model should not mutate saved browser filters")
 end
 
+local function testControllerBindingsTriggerOnAnyDeviceIndex()
+  -- Gamepads live on controller indices >= 1; device 0 is the keyboard
+  local ui = UI.new({
+    input = {
+      IsButtonTriggered = function(code, id) return code == 903 and id == 2 end,
+      IsButtonPressed = function() return false end
+    },
+    keyboard = {},
+    controller = {},
+    state = { bindings = { keyboardGoal = 901, keyboardToggle = 902, controllerGoal = 903, controllerToggle = 904 }, browser = {}, hud = {}, decision = {} },
+    entries = entries()
+  })
+  ui:input()
+  assertEqual(ui.open, true, "controller goal binding must trigger from a gamepad on a non-zero device index")
+end
+
+local function testHeldDetailBindingWorksOnGamepadDeviceIndex()
+  local ui = UI.new({
+    input = {
+      IsButtonTriggered = function() return false end,
+      IsButtonPressed = function(code, id) return code == 11 and id == 1 end
+    },
+    keyboard = {},
+    controller = {},
+    state = { bindings = { keyboardDetail = 297, controllerDetail = 11 }, browser = {}, hud = {}, decision = {} },
+    entries = {}
+  })
+  ui:input()
+  assertEqual(ui.detailHeld, true, "held detail binding must register from a gamepad on a non-zero device index")
+end
+
 local function testRenderTextUsesScaledTextArgumentOrder()
   local scaled = {}
   local ui = UI.new({
@@ -479,7 +510,7 @@ local function testMarkersFallBackToRawCoordinatesWithoutWorldToScreen()
   assertTrue(found, "door arrow should fall back to raw world coordinates when WorldToScreen is unavailable")
 end
 
-local tests = { testBuildsLiveCategoryCounts, testKeepsSelectedRowInPageWindow, testAdvancesPastInclusivePageEndpoint, testKeepsFinalSelectionInPersistedPageWindow, testResolvesSortedGoalDetails, testPreservesReadablePrerequisiteDetails, testFiltersCatalogStatusWhileShowingCurrentRunStatus, testExposesCategoryAndRowContract, testClampsOneBasedScrollForEmptyAndShortCategories, testShouldersChangeCategories, testControllerSelectsAbsoluteGoalAfterScrolling, testDpadMovesBetweenCategoryAndGoalPanes, testSearchPreservesSpacesAndPunctuation, testActionControllerNavigatesWithoutControllerTable, testActionConfirmWinsOverOpenBrowserBinding, testSearchEditResetsSelectionBeforeConfirmingNarrowedResult, testEmptyConfirmDoesNotCloseBrowser, testBrowserModelUsesLiveSnapshotWithoutMutatingFilters, testRenderTextUsesScaledTextArgumentOrder, testRenderTextNeverDownscalesBitmapFont, testHudRendersSelectedGoalNameInsteadOfInternalId, testHudUsesReadableFallbackWhenSelectedGoalIsMissing, testHeldDetailBindingExpandsWithoutToggling, testDoorMarkerConvertsWorldToScreenWhenAvailable, testChoiceMarkerConvertsWorldToScreenWhenAvailable, testMarkersFallBackToRawCoordinatesWithoutWorldToScreen }
+local tests = { testBuildsLiveCategoryCounts, testKeepsSelectedRowInPageWindow, testAdvancesPastInclusivePageEndpoint, testKeepsFinalSelectionInPersistedPageWindow, testResolvesSortedGoalDetails, testPreservesReadablePrerequisiteDetails, testFiltersCatalogStatusWhileShowingCurrentRunStatus, testExposesCategoryAndRowContract, testClampsOneBasedScrollForEmptyAndShortCategories, testShouldersChangeCategories, testControllerSelectsAbsoluteGoalAfterScrolling, testDpadMovesBetweenCategoryAndGoalPanes, testSearchPreservesSpacesAndPunctuation, testActionControllerNavigatesWithoutControllerTable, testActionConfirmWinsOverOpenBrowserBinding, testSearchEditResetsSelectionBeforeConfirmingNarrowedResult, testEmptyConfirmDoesNotCloseBrowser, testBrowserModelUsesLiveSnapshotWithoutMutatingFilters, testControllerBindingsTriggerOnAnyDeviceIndex, testHeldDetailBindingWorksOnGamepadDeviceIndex, testRenderTextUsesScaledTextArgumentOrder, testRenderTextNeverDownscalesBitmapFont, testHudRendersSelectedGoalNameInsteadOfInternalId, testHudUsesReadableFallbackWhenSelectedGoalIsMissing, testHeldDetailBindingExpandsWithoutToggling, testDoorMarkerConvertsWorldToScreenWhenAvailable, testChoiceMarkerConvertsWorldToScreenWhenAvailable, testMarkersFallBackToRawCoordinatesWithoutWorldToScreen }
 for index, test in ipairs(tests) do
   test()
   print("navigation ok " .. index)

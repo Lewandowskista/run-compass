@@ -1,6 +1,6 @@
 # Controls and HUD
 
-When Mod Config Menu is installed, bindings can be changed in **Run Compass → General**. Without it, base routing still runs on safe defaults and shows a one-time notice. The saved defaults are keyboard input codes `117` (goal browser), `118` (toggle guidance), and `119` (guidance details binding, rebindable in MCM), plus controller codes `10` (goal browser), `13` (toggle guidance), and `11` (guidance details); use the named input picker rather than relying on numeric codes when rebinding.
+When Mod Config Menu is installed, bindings can be changed in **Run Compass → General**. Without it, base routing still runs on safe defaults and shows a one-time notice. The default keyboard bindings are **F6** (goal browser), **F7** (toggle guidance), and **F8** (guidance details, hold to expand the card); the default controller bindings are left stick click (goal browser), right stick click (toggle guidance), and right bumper (guidance details). All are rebindable in MCM via the named input picker.
 
 ## Goal browser
 
