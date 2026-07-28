@@ -1,25 +1,29 @@
 # Controls and HUD
 
-When Mod Config Menu is installed, bindings can be changed in **Run Compass → General**. Without it, base routing still runs on safe defaults and shows a one-time notice. The saved defaults are keyboard input codes `117` (goal browser) and `118` (toggle guidance), plus controller codes `10` and `13`; use the named input picker rather than relying on numeric codes when rebinding.
+When Mod Config Menu is installed, bindings can be changed in **Run Compass → General**. Without it, base routing still runs on safe defaults and shows a one-time notice. The saved defaults are keyboard input codes `117` (goal browser), `118` (toggle guidance), and `119` (guidance details binding, rebindable in MCM), plus controller codes `10` (goal browser), `13` (toggle guidance), and `11` (guidance details); use the named input picker rather than relying on numeric codes when rebinding.
 
 ## Goal browser
 
-With the browser open:
+Opening the browser shows three panes: **categories** on the left, the **goal list** in the middle, and **details** (readable name, prerequisites, support tier, and current-run eligibility) on the right. Navigation moves within whichever pane is focused:
 
-- **Up/Down** (or controller D-pad up/down) moves the selection.
-- **Enter** selects the highlighted goal; **Escape** closes the browser.
-- **Backspace** edits the search; letter keys and **Space** add to it.
-- **Tab** (controller **X**) cycles kind: all, boss, collectible.
-- **S** (controller **Y**) cycles status: all, locked, already unlocked, instructional only, catalog update required.
+- **Up/Down** (or controller D-pad up/down) moves the selection within the focused pane — goals in the goal list, categories in the category pane, or scrolls the details text when details is focused.
+- **Left/Right** (or controller D-pad left/right) switches focus between the categories, goals, and details panes.
+- Controller **LB/RB** (or **LT/RT**) cycle categories directly from any pane.
+- **Enter** (controller **A**) selects the highlighted goal; **Escape** (controller **B**) closes the browser.
+- **Tab** (controller **X**) cycles the kind filter: all, boss, collectible.
+- **S** (controller **Y**) cycles the status filter: all, locked, already unlocked, instructional only, catalog update required.
 - **L** cycles the alphabetical letter filter.
+- **Backspace** edits the search; letter keys, **Space**, and punctuation (`-`, `'`, `,`, `.`, `/`) all add to it. The goal list scrolls to fit more than ten entries.
 
-Controller navigation currently covers D-pad up/down plus **X** (kind filter) and **Y** (status filter). Text search and text editing use the keyboard; controller text entry is not assumed.
+Controller navigation covers D-pad movement within and across panes, **LB/RB** for category cycling, **A** to select, **B** to close, **X** for the kind filter, and **Y** for the status filter. Text search and text editing use the keyboard; controller text entry is not assumed.
 
 ## Guidance HUD
 
-After a room is clear, the HUD shows the target, short route steps, and a next-door arrow. A diamond marks the primary visible choice when comparisons are enabled. **Toggle guidance** switches the HUD's pinned state; when unpinned, the recommendation is suppressed in uncleared rooms. **Pinned** and **HUD enabled** are separate settings.
+After a room is clear, the HUD shows a compact card: the target's readable name, the top route step, the strongest reason for the recommendation, and an action label (`TAKE`, `BUY`, `REROLL`, or `SKIP`) in four lines or fewer. The HUD never shows internal goal or item IDs. Holding the **guidance details** binding (keyboard default `119`; controller default button `11`) expands the card with additional steps. **Toggle guidance** switches the HUD's pinned state; when unpinned, the recommendation is suppressed in uncleared rooms. **Pinned** and **HUD enabled** are separate settings.
 
-Available settings include scale (`0.5–2`), X/Y offsets, automatic comparisons, detail level (`1–3`), confidence and warning text, developer diagnostics, and optional EID descriptions.
+A door arrow points to the next legitimately revealed door using its live in-room position, and a marker (`TAKE`, `CAUTION`, `SKIP`, or `REROLL`) appears over the visible pedestal, shop item, or interactable the recommendation is evaluating.
+
+Available settings include scale (`0.5–2`), X/Y offsets, automatic comparisons, detail level (`1–3`), confidence and warning text, developer diagnostics, and optional EID descriptions. EID text remains descriptive-only; when an item's identity is hidden (Curse of the Blind), Run Compass shows no advice and EID shows no text for it.
 
 ## Console
 

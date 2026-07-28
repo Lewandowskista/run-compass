@@ -3,7 +3,7 @@
 ![Run Compass Observatory](https://raw.githubusercontent.com/Lewandowskista/run-compass/main/docs/images/run-compass-observatory-hero.png)
 <img src="https://raw.githubusercontent.com/Lewandowskista/run-compass/main/docs/images/run-compass-observatory-mark.png" alt="Run Compass Observatory mark" width="96" align="right">
 
-[![Version 1.1.0](https://img.shields.io/badge/version-1.1.0-8be04e?style=flat-square&labelColor=101b33)](metadata.xml)
+[![Version 1.2.0](https://img.shields.io/badge/version-1.2.0-8be04e?style=flat-square&labelColor=101b33)](metadata.xml)
 [![Tests](https://img.shields.io/badge/tests-fengari%20fixtures-8be04e?style=flat-square&labelColor=101b33)](https://github.com/Lewandowskista/run-compass/blob/main/docs/RELEASES.md)
 [![Fair play](https://img.shields.io/badge/fair--play-visible%20information-8be04e?style=flat-square&labelColor=101b33)](https://github.com/Lewandowskista/run-compass/blob/main/docs/FAIR_PLAY.md)
 
@@ -35,16 +35,16 @@ Install the Workshop package, enable Run Compass, and start a solo Normal/Hard r
 
 ## First run: a two-minute route
 
-1. Open the Run Compass goal browser (configure its keyboard/controller binding in Mod Config Menu) and choose a target such as `boss.delirium`.
-2. Clear a room. The HUD shows the selected target, the next revealed door, and a short list of visible actions; a diamond marks the primary visible choice when one is available.
+1. Open the Run Compass goal browser (configure its keyboard/controller binding in Mod Config Menu) and use the three-pane view — categories, goals, details — to pick a target such as `boss.delirium`. The details pane shows the goal's readable name, prerequisites, support tier, and current-run eligibility.
+2. Clear a room. The compact HUD card shows the target's readable name, the next revealed door, the strongest reason for the recommendation, and an action (`TAKE`/`BUY`/`REROLL`/`SKIP`) in four lines or fewer; a door arrow points to the next legitimately revealed door, and a marker highlights the primary visible choice when one is available. Hold the guidance details binding to expand the card.
 3. Take the action you want, or hold/skip it. The guide recomputes after the next event and preserves a margin for required keys, bombs, coins, health, or timers.
 4. Use `runcompass status` to inspect the capability tier and selected goal, or `runcompass catalog` to inspect catalog totals and unmapped-achievement diagnostics.
 
-The HUD is hidden while a room is uncleared unless **Pinned** is enabled. A recommendation can be instructional (for example, a goal requiring Repentogon) rather than pretending it can route an unsupported state.
+The HUD is hidden while a room is uncleared unless **Pinned** is enabled. A recommendation can be instructional (for example, a goal requiring Repentogon) rather than pretending it can route an unsupported state. The HUD always shows catalog names, never internal goal or item IDs.
 
 ## Controls and settings
 
-The [controls guide](https://github.com/Lewandowskista/run-compass/blob/main/docs/CONTROLS.md) lists keyboard browser navigation, currently supported controller D-pad/X/Y navigation, configured browser/toggle bindings, console commands, and every Mod Config Menu setting. Keyboard text search uses letter keys; controller text entry is not assumed. Keyboard and controller bindings are editable; defaults are stored as game input codes so they survive save migration. HUD visibility, pinning, scale, X/Y offset, automatic comparisons, detail level (1–3), confidence, warnings, diagnostics, and EID text are all opt-in/configurable.
+The [controls guide](https://github.com/Lewandowskista/run-compass/blob/main/docs/CONTROLS.md) lists keyboard and controller navigation for the three-pane goal browser (D-pad/arrow movement within and across panes, LB/RB category cycling, A/Enter to select, B/Escape to close, X/Tab for the kind filter, Y/S for the status filter), configured browser/toggle/detail bindings, console commands, and every Mod Config Menu setting. Keyboard text search accepts letters, space, and punctuation; controller text entry is not assumed. Keyboard and controller bindings are editable; defaults are stored as game input codes so they survive save migration. HUD visibility, pinning, scale, X/Y offset, automatic comparisons, detail level (1–3), confidence, warnings, diagnostics, and EID text are all opt-in/configurable.
 
 ## Fair-play methodology
 
@@ -83,4 +83,4 @@ The fixture, performance, and build-guide suites are described in the [release g
 
 ## Scope
 
-Version 1.1 targets solo Normal/Hard routing and visible build decisions for every regular and tainted vanilla character. Greed, challenges, Victory Laps, co-op, and progression-disabled custom runs are marked inactive. Run Compass never changes rooms, pickups, seeds, achievements, or player state.
+Version 1.2 targets solo Normal/Hard routing and visible build decisions for every regular and tainted vanilla character. Greed, challenges, Victory Laps, co-op, and progression-disabled custom runs are marked inactive. Run Compass never changes rooms, pickups, seeds, achievements, or player state.

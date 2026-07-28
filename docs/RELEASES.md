@@ -1,5 +1,14 @@
 # Testing, packaging, and releases
 
+## 1.2.0 — Actionable Guidance UI
+
+- Replaces the flat goal list with a three-pane, controller-friendly browser.
+- Shows readable goal names, prerequisites, support tier, and current-run eligibility.
+- Ranks legitimately revealed route frontiers instead of choosing the first door.
+- Evaluates visible items during exploratory routing.
+- Adds compact persistent route cards, exact door arrows, and TAKE/BUY/REROLL/SKIP markers.
+- Keeps EID descriptive-only and preserves the fair-play visibility boundary.
+
 ## Local verification
 
 Run the pure Lua fixture, performance, and build-guide suites with:
