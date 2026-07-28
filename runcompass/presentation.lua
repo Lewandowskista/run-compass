@@ -1,6 +1,22 @@
 local Presentation = {}
 local Strings = require("runcompass.strings")
 
+local LABELS = {
+  ranked_frontier = "Best revealed frontier",
+  treasure_detour = "Worthwhile treasure detour",
+  shop_detour = "Worthwhile shop detour",
+  character_synergy = "Strong for this character",
+  owned_item_synergy = "Synergizes with owned items",
+  anti_synergy = "Conflicts with the current build",
+  transformation_threshold = "Completes or advances a transformation",
+  active_replacement_loss = "Replacing the active loses stored value",
+  goal_resource_reserved = "Preserve resources for the target"
+}
+
+function Presentation.label(code)
+  return LABELS[code] or tostring(code or "")
+end
+
 function Presentation.lines(recommendation, settings)
   local lines = {}
   for index, step in ipairs(recommendation.steps or {}) do

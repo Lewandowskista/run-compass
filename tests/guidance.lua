@@ -2,6 +2,7 @@ package.path = "./?.lua;./?/init.lua;" .. package.path
 
 local Frontier = require("runcompass.frontier")
 local Planner = require("runcompass.planner")
+local Hud = require("runcompass.hud")
 
 local function assertEqual(actual, expected, message)
   if actual ~= expected then error((message or "values differ") .. " (expected " .. tostring(expected) .. ", got " .. tostring(actual) .. ")") end
@@ -83,11 +84,51 @@ local function testExploreHysteresisKeepsValidEquivalentDoor()
   assertEqual(result.nextDoorSlot, 0, "valid equivalent-risk frontier should retain the previous door")
 end
 
+local function testDoorPositionUsesGameRoom()
+  local requestedSlot
+  local game = {
+    GetRoom = function()
+      return {
+        GetDoorSlotPosition = function(_, slot)
+          requestedSlot = slot
+          return { X = 600, Y = 280 }
+        end
+      }
+    end
+  }
+  local position = Hud.doorPosition(game, 2)
+  assertEqual(requestedSlot, 2, "HUD must request the recommended slot from Game:GetRoom")
+  assertEqual(position.x, 600, "door marker should use the live X coordinate")
+end
+
+local function testCompactCardUsesStrongestReasonAndWarning()
+  local view = Hud.view({
+    status = "ok",
+    steps = { "Take the treasure-room detour", "Long secondary text" },
+    confidence = "high",
+    decision = {
+      primary = {
+        action = "take",
+        name = "Test Relic",
+        reasonCodes = { owned_item_synergy = true, character_synergy = true },
+        warnings = { "active_replacement_loss" },
+        confidence = "high"
+      }
+    }
+  }, "Mega Satan", false)
+  assertEqual(view.target, "Mega Satan", "card should use readable target")
+  assertEqual(view.action, "TAKE", "card should expose immediate action")
+  assertTrue(#view.lines <= 4, "compact card must remain bounded")
+  assertEqual(#view.warnings, 1, "compact card should preserve the strongest warning")
+end
+
 local tests = {
   testRanksKnownTreasureFrontierAboveNormalFrontier,
   testPlannerExploreUsesRankedFrontier,
   testExploreRecommendationIncludesVisibleItemDecision,
-  testExploreHysteresisKeepsValidEquivalentDoor
+  testExploreHysteresisKeepsValidEquivalentDoor,
+  testDoorPositionUsesGameRoom,
+  testCompactCardUsesStrongestReasonAndWarning
 }
 
 for index, test in ipairs(tests) do test(); print("guidance ok " .. index) end

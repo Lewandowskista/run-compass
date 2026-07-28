@@ -1,9 +1,20 @@
 local Presentation = require("runcompass.presentation")
 local Strings = require("runcompass.strings")
 local BrowserModel = require("runcompass.browser_model")
+local Hud = require("runcompass.hud")
 
 local UI = {}
 UI.__index = UI
+
+local function loadSprite(factory, path, animation)
+  if type(factory) ~= "function" then return nil end
+  local ok, sprite = pcall(factory)
+  if not ok or not sprite then return nil end
+  local loaded = pcall(sprite.Load, sprite, path, true)
+  if not loaded then return nil end
+  pcall(sprite.Play, sprite, animation, true)
+  return sprite
+end
 
 local function renderText(isaac, text, x, y, scale, color)
   color = color or { 1, 1, 1, 1 }
@@ -24,11 +35,12 @@ end
 
 function UI.new(env)
   local saved = (env.state and env.state.browser) or {}
-  return setmetatable({
+  local ui = setmetatable({
     env = env,
     open = false,
     query = "",
     mcmNoticeShown = false,
+    detailHeld = false,
     browserState = {
       category = saved.category or "boss_routes",
       focusedPane = "goals",
@@ -46,6 +58,9 @@ function UI.new(env)
       }
     }
   }, UI)
+  ui.arrowSprite = loadSprite(env.spriteFactory, "gfx/ui/compass-arrow.anm2", "Idle")
+  ui.markerSprite = loadSprite(env.spriteFactory, "gfx/ui/guidance-markers.anm2", "Take")
+  return ui
 end
 
 function UI:browserModel()
@@ -275,26 +290,47 @@ function UI:render(snapshot, recommendation)
   end
   if not recommendation or not self.env.state.hud.visible then return end
   if not self.env.state.pinned and snapshot.currentRoomClear == false then return end
-  local lines = Presentation.lines(recommendation, self.env.state.decision)
+
   local selectedGoal = type(self.env.getSelectedGoal) == "function" and self.env.getSelectedGoal() or nil
-  local selected = selectedGoal and selectedGoal.name or Strings.get("hud.unknownGoal")
-  renderText(isaac, Strings.get("hud.target", selected), 20 + (self.env.state.hud.x or 0), 18 + (self.env.state.hud.y or 0), 0.8 * (self.env.state.hud.scale or 1), { 0.8, 0.8, 0.9, 1 })
-  for index, line in ipairs(lines) do renderText(isaac, line, 20, 30 + index * 12, 1, { 0.9, 0.65, 1, 1 }) end
-  if recommendation.nextDoorSlot ~= nil then
-    local x, y = 20 + (self.env.state.hud.x or 0), 30 + (#lines + 1) * 12 + (self.env.state.hud.y or 0)
-    local game = self.env.game
-    if game and game.GetLevel then
-      local ok, room = pcall(function() return game:GetLevel():GetCurrentRoom() end)
-      if ok and room and room.GetDoorSlotPosition then
-        local position = room:GetDoorSlotPosition(recommendation.nextDoorSlot)
-        if position then x, y = position.X - 8, position.Y - 8 end
-      end
-    end
-    renderText(isaac, "→", x, y, 0.4 * (self.env.state.hud.scale or 1), { 1, 0.4, 1, 1 })
+  local targetName = selectedGoal and selectedGoal.name or Strings.get("hud.unknownGoal")
+  local expanded = self.detailHeld == true
+  local view = Hud.view(recommendation, targetName, expanded)
+  local scale = self.env.state.hud.scale or 1
+  local cardX = 20 + (self.env.state.hud.x or 0)
+  local cardY = 18 + (self.env.state.hud.y or 0)
+
+  renderText(isaac, Strings.get("hud.target", view.target), cardX, cardY, 0.8 * scale, { 0.8, 0.8, 0.9, 1 })
+  for index, line in ipairs(view.lines) do
+    renderText(isaac, Presentation.label(line), cardX, cardY + index * 12, 0.7 * scale, { 1, 0.92, 0.75, 1 })
   end
-  if recommendation.decision and recommendation.decision.primary and recommendation.decision.primary.position and (not self.env.state.decision or self.env.state.decision.autoCompare ~= false) then
-    local position = recommendation.decision.primary.position
-    renderText(isaac, "◆", position.x or 0, position.y or 0, 0.5 * (self.env.state.hud.scale or 1), { 0.9, 0.8, 0.2, 1 })
+  if view.action then
+    renderText(isaac, view.action, cardX, cardY + (#view.lines + 1) * 12, 0.75 * scale, { 0.55, 0.9, 0.62, 1 })
+  end
+
+  local doorPosition = Hud.doorPosition(self.env.game, view.nextDoorSlot)
+  if doorPosition then
+    local rotations = { [0] = 180, [1] = -90, [2] = 0, [3] = 90, [4] = 180, [5] = -90, [6] = 0, [7] = 90 }
+    if self.arrowSprite then
+      self.arrowSprite.Rotation = rotations[view.nextDoorSlot] or 0
+      self.arrowSprite.Scale = Vector(0.5 * scale, 0.5 * scale)
+      self.arrowSprite:Render(Vector(doorPosition.x, doorPosition.y))
+    else
+      renderText(isaac, "→", doorPosition.x - 8, doorPosition.y - 8, 0.5 * scale, { 1, 0.84, 0.2, 1 })
+    end
+  end
+
+  if view.choicePosition then
+    local animation = view.action == "SKIP" and "Skip"
+      or view.action == "REROLL" and "Reroll"
+      or (view.warnings and #view.warnings > 0) and "Caution"
+      or "Take"
+    if self.markerSprite then
+      self.markerSprite:Play(animation, true)
+      self.markerSprite.Scale = Vector(0.65 * scale, 0.65 * scale)
+      self.markerSprite:Render(Vector(view.choicePosition.x, view.choicePosition.y - 24))
+    else
+      renderText(isaac, view.action or "◆", view.choicePosition.x - 12, view.choicePosition.y - 24, 0.45 * scale, { 0.55, 0.9, 0.62, 1 })
+    end
   end
 end
 
