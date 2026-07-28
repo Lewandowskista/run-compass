@@ -18,6 +18,7 @@ local Milestones = require("runcompass.milestones")
 local Search = require("runcompass.search")
 local Valuation = require("runcompass.valuation")
 local MCM = require("runcompass.mcm")
+local UI = require("runcompass.ui")
 
 local function assertEqual(actual, expected, message)
   if actual ~= expected then
@@ -591,6 +592,30 @@ local function testMcmKeybindRowsOpenInteractivePopups()
   end
 end
 
+local function testControllerConfirmsAndCancelsGoalBrowser()
+  local selected = nil
+  local triggered = nil
+  local ui = UI.new({
+    input = { IsButtonTriggered = function(code) return code == triggered end },
+    keyboard = { KEY_UP = 100, KEY_DOWN = 101, KEY_TAB = 102, KEY_S = 103, KEY_L = 104, KEY_ESCAPE = 105, KEY_BACKSPACE = 106, KEY_ENTER = 107, KEY_A = 200, KEY_Z = 225, KEY_SPACE = 108, KEY_MINUS = 109 },
+    controller = { DPAD_UP = 1, DPAD_DOWN = 2, BUTTON_X = 3, BUTTON_Y = 4, BUTTON_A = 5, BUTTON_B = 6 },
+    state = { bindings = { keyboardGoal = 117, keyboardToggle = 118, controllerGoal = 10, controllerToggle = 13 } },
+    entries = { { id = "boss.delirium", name = "Delirium", kind = "boss", status = "routable" } },
+    onGoalSelected = function(goal) selected = goal end
+  })
+
+  ui.open = true
+  triggered = 5
+  ui:input()
+  assertEqual(selected.id, "boss.delirium", "controller A should select the highlighted goal")
+  assertEqual(ui.open, false, "selecting a goal should close the browser")
+
+  ui.open = true
+  triggered = 6
+  ui:input()
+  assertEqual(ui.open, false, "controller B should close the browser without changing the goal")
+end
+
 local tests = {
   testRoutesToGoalThroughRevealedRooms,
   testNeverUsesHiddenSecretRoom,
@@ -642,7 +667,8 @@ local tests = {
   testInvalidPreviousRecommendationIsNotPreserved,
   testValuationRanksSurvivalAndResourceMarginBeforeBuildGain,
   testValuationPrefersVisibleBuildGainWhenRiskIsEqual,
-  testMcmKeybindRowsOpenInteractivePopups
+  testMcmKeybindRowsOpenInteractivePopups,
+  testControllerConfirmsAndCancelsGoalBrowser
 }
 
 for index, test in ipairs(tests) do

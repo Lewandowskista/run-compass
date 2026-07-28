@@ -29,9 +29,9 @@ function UI:input()
   if not input then return end
   local state = self.env.state
   local pressed = function(code) return code ~= nil and input.IsButtonTriggered and input.IsButtonTriggered(code, 0) end
-  if pressed(state.bindings.keyboardGoal) then self:toggleBrowser() end
+  if pressed(state.bindings.keyboardGoal) then self:toggleBrowser(); return end
   if pressed(state.bindings.keyboardToggle) then self:togglePinned() end
-  if pressed(state.bindings.controllerGoal) then self:toggleBrowser() end
+  if pressed(state.bindings.controllerGoal) then self:toggleBrowser(); return end
   if pressed(state.bindings.controllerToggle) then self:togglePinned() end
   if not self.open or not keyboard or not input.IsButtonTriggered then return end
   self.filters.query = self.query
@@ -71,6 +71,8 @@ function UI:input()
     local current = 1; for index, status in ipairs(statuses) do if status == self.filters.status then current = index end end
     self.filters.status = statuses[current % #statuses + 1]; self.index = 1; return
   end
+  if controller and pressed(controller.BUTTON_A) then self:selectGoal(entries); return end
+  if controller and pressed(controller.BUTTON_B) then self.open = false; return end
   if pressed(keyboard.KEY_ESCAPE) then self.open = false; return end
   if pressed(keyboard.KEY_BACKSPACE) then self.query = string.sub(self.query, 1, -2); return end
   if pressed(keyboard.KEY_ENTER) then self:selectGoal(Browser.filter(self.env.entries, self.filters)); return end
