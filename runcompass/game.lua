@@ -200,17 +200,33 @@ function GameAdapter:buildPlayer(player)
     { playerForm.PLAYERFORM_LORD_OF_THE_FLIES, "lord_of_the_flies" }, { playerForm.PLAYERFORM_BELIAL, "belial" }
   }
   for _, form in ipairs(formNames) do if form[1] ~= nil and invoke(false, "HasPlayerForm", form[1]) then transformations[form[2]] = true end end
-  local healthState = {
-    current = invoke(0, "GetHearts") + invoke(0, "GetSoulHearts") + invoke(0, "GetBlackHearts"),
-    red = invoke(0, "GetHearts"), soul = invoke(0, "GetSoulHearts"), black = invoke(0, "GetBlackHearts"),
-    bone = invoke(0, "GetBoneHearts"), rotten = invoke(0, "GetRottenHearts"), max = invoke(0, "GetMaxHearts")
-  }
   local actorToken = characterTokens[playerType]
   if actorToken == "jacob_and_esau" then actorToken = invoke(false, "IsSubPlayer") and "esau" or "jacob" end
+  local red = invoke(0, "GetHearts")
+  local soul = invoke(0, "GetSoulHearts")
+  local blackMask = invoke(0, "GetBlackHearts")
+  local boneContainers = invoke(0, "GetBoneHearts")
+  local maxRed = invoke(0, "GetMaxHearts")
+  local characterToken = characterTokens[playerType]
+  local coinHealth = characterToken == "keeper" or characterToken == "tainted_keeper"
+  local boneHealth = boneContainers > 0 or characterToken == "the_forgotten" or characterToken == "tainted_forgotten"
+  local noRedHealth = maxRed <= 0
+    or characterToken == "blue_baby" or characterToken == "tainted_blue_baby"
+    or characterToken == "the_lost" or characterToken == "tainted_lost"
+  local healthMode = coinHealth and "coin" or boneHealth and "bone" or noRedHealth and "soul" or "red"
+  local healthState = {
+    effective = red + soul,
+    red = red,
+    soul = soul,
+    blackMask = blackMask,
+    boneContainers = boneContainers,
+    maxRed = maxRed,
+    mode = healthMode
+  }
   return {
-    health = healthState.current, maxHealth = healthState.max, healthState = healthState,
+    health = healthState.effective, maxHealth = healthState.maxRed, healthState = healthState,
     keys = invoke(0, "GetNumKeys"), bombs = invoke(0, "GetNumBombs"), coins = invoke(0, "GetNumCoins"),
-    power = player.Damage or 0, playerType = playerType, actorToken = actorToken, characterToken = characterTokens[playerType],
+    power = player.Damage or 0, playerType = playerType, actorToken = actorToken, characterToken = characterToken,
     stats = { damage = player.Damage or 0, fireRate = player.MaxFireDelay or 0, speed = player.MoveSpeed or 0 },
     resources = { keys = invoke(0, "GetNumKeys"), bombs = invoke(0, "GetNumBombs"), coins = invoke(0, "GetNumCoins") },
     collectibles = collectibles, actives = actives, trinkets = trinkets, cards = cards, pills = pills,
@@ -343,6 +359,7 @@ function GameAdapter:buildRooms(level, currentIndex, currentRoom, visibility)
     end
   end
   if currentRoom and currentRoom.GetDoor then
+    local doorVariants = self.env.doorVariant or rawget(_G, "DoorVariant") or {}
     local current = nil
     for _, room in ipairs(rooms) do if room.id == currentIndex then current = room end end
     if current then
@@ -352,7 +369,37 @@ function GameAdapter:buildRooms(level, currentIndex, currentRoom, visibility)
         local target = door and safe(nil, function() return door.TargetRoomIndex end)
         local canonical = target
         if target ~= nil and bySafe[target] then canonical = bySafe[target] end
-        if door and canonical and canonical >= 0 then current.doors[#current.doors + 1] = { slot = slot, to = canonical, cost = door.IsLocked and 1 or 0 } end
+        if door and canonical and canonical >= 0 then
+          local locked, open
+          if type(door.IsLocked) == "function" then locked = safe(nil, function() return door:IsLocked() end) end
+          if type(door.IsOpen) == "function" then open = safe(nil, function() return door:IsOpen() end) end
+          local variant = safe(nil, function() return door.Desc and door.Desc.Variant or door.Variant end)
+          local ordinary = (doorVariants.DOOR_LOCKED ~= nil and variant == doorVariants.DOOR_LOCKED)
+            or (doorVariants.DOOR_UNLOCKED ~= nil and variant == doorVariants.DOOR_UNLOCKED)
+          local special = false
+          for name, value in pairs(doorVariants) do
+            if value == variant and name ~= "DOOR_LOCKED" and name ~= "DOOR_UNLOCKED" and name ~= "DOOR_UNSPECIFIED" then
+              special = true
+            end
+          end
+          local cost, confidence
+          if open == true or locked == false then
+            cost, confidence = {}, "high"
+          elseif ordinary and locked == true then
+            cost, confidence = { keys = 1 }, "high"
+          else
+            cost, confidence = { unknown = true }, "low"
+          end
+          current.doors[#current.doors + 1] = {
+            slot = slot,
+            to = canonical,
+            kind = ordinary and "ordinary" or special and "special" or "unknown",
+            locked = locked,
+            open = open,
+            cost = cost,
+            confidence = confidence
+          }
+        end
       end
     end
   end

@@ -34,21 +34,32 @@ end
 local function pathResources(path, roomMap)
   local cost = { keys = 0, bombs = 0, coins = 0, health = 0 }
   for index = 2, #path do
-    local room = roomMap[path[index]]
-    if not room then return cost end
-    for resource, amount in pairs(room.cost or {}) do
-      cost[resource] = (cost[resource] or 0) + amount
+    local source = roomMap[path[index - 1]]
+    if not source or not roomMap[path[index]] then return cost end
+    local edgeCost = {}
+    for _, door in ipairs(source.doors or {}) do
+      if door.to == path[index] then edgeCost = door.cost or {}; break end
+    end
+    for resource, amount in pairs(edgeCost) do
+      if resource == "unknown" and amount then
+        cost.unknown = true
+      elseif type(amount) == "number" then
+        cost[resource] = (cost[resource] or 0) + amount
+      end
     end
   end
   return cost
 end
 
 local function canAfford(snapshot, goal, cost)
+  if cost.unknown then return false end
   local available = snapshot.player or {}
   local required = goal.requiredResources or {}
   for resource, amount in pairs(cost) do
-    local reserve = required[resource] or 0
-    if (available[resource] or 0) - amount < reserve then return false end
+    if type(amount) == "number" then
+      local reserve = required[resource] or 0
+      if (available[resource] or 0) - amount < reserve then return false end
+    end
   end
   return true
 end

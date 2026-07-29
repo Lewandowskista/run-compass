@@ -10,24 +10,30 @@ local function roomMap(rooms)
 end
 
 function Valuation.newTotals()
-  return { cost = { keys = 0, bombs = 0, coins = 0, health = 0 }, buildGain = 0, risk = 0 }
+  return { cost = { keys = 0, bombs = 0, coins = 0, health = 0, unknown = false }, buildGain = 0, risk = 0 }
 end
 
 function Valuation.cloneTotals(totals)
   local cost = totals.cost
   return {
-    cost = { keys = cost.keys, bombs = cost.bombs, coins = cost.coins, health = cost.health },
+    cost = { keys = cost.keys, bombs = cost.bombs, coins = cost.coins, health = cost.health, unknown = cost.unknown },
     buildGain = totals.buildGain,
     risk = totals.risk
   }
 end
 
--- Applies one room's contribution to a running totals table (cost, risk, raw
+-- Applies one traversed edge and target room's contribution to running totals (cost, risk, raw
 -- buildGain including treasure/shop bonuses and pickup-quality gains). Callers
 -- that need per-path evaluation but not the missing-room short circuit (e.g.
 -- incremental BFS accumulation) can call this directly per visited room.
-function Valuation.accumulate(snapshot, room, goalRooms, totals)
-  for resource, amount in pairs(room.cost or {}) do totals.cost[resource] = (totals.cost[resource] or 0) + amount end
+function Valuation.accumulate(snapshot, room, goalRooms, totals, edgeCost)
+  for resource, amount in pairs(edgeCost or {}) do
+    if resource == "unknown" and amount then
+      totals.cost.unknown = true
+    elseif type(amount) == "number" then
+      totals.cost[resource] = (totals.cost[resource] or 0) + amount
+    end
+  end
   if room.clear == false then totals.risk = totals.risk + (room.kind == "boss" and 2 or 1) end
   if not goalRooms[room.id] then
     if room.pickups and room.pickups[1] then
@@ -48,12 +54,13 @@ function Valuation.finalize(snapshot, goal, totals, pathLength)
   local cost, buildGain, risk = totals.cost, totals.buildGain, totals.risk
   local available, required = snapshot.player or {}, goal and goal.requiredResources or {}
   local resourceMargin, feasible = 0, true
+  if cost.unknown then feasible, resourceMargin = false, -math.huge end
   -- `required` is empty for the common case (no resource requirements on this
   -- goal, e.g. frontier exploration): skip the per-resource margin scan
   -- entirely rather than iterating RESOURCE_NAMES only to discover nothing
   -- was required, since this runs once per ranked candidate.
   if next(required) ~= nil then
-    resourceMargin = nil
+    resourceMargin = cost.unknown and -math.huge or nil
     local hasRequirement = false
     for _, resource in ipairs(RESOURCE_NAMES) do
       local margin = (available[resource] or 0) - (cost[resource] or 0) - (required[resource] or 0)
@@ -63,7 +70,7 @@ function Valuation.finalize(snapshot, goal, totals, pathLength)
         if not resourceMargin or margin < resourceMargin then resourceMargin = margin end
       end
     end
-    if not hasRequirement then resourceMargin = 0 end
+    if not hasRequirement and not cost.unknown then resourceMargin = 0 end
   end
   buildGain = buildGain - (cost.keys or 0) * 20 - (cost.bombs or 0) * 8 - (cost.coins or 0) * 0.25 - (cost.health or 0) * 15
   local maxHealth = math.max(1, available.maxHealth or available.health or 1)
@@ -87,9 +94,14 @@ function Valuation.evaluate(snapshot, nodes, goal)
   local goalRooms = {}
   for _, id in ipairs(goal and goal.destinationRooms or {}) do goalRooms[id] = true end
   for index = 2, #nodes do
+    local source = rooms[nodes[index - 1]]
     local room = rooms[nodes[index]]
-    if not room then return { feasible = false, survivalRisk = math.huge, resourceMargin = -math.huge, buildGain = 0, detour = math.huge, time = math.huge } end
-    Valuation.accumulate(snapshot, room, goalRooms, totals)
+    if not source or not room then return { feasible = false, survivalRisk = math.huge, resourceMargin = -math.huge, buildGain = 0, detour = math.huge, time = math.huge } end
+    local edgeCost = {}
+    for _, door in ipairs(source.doors or {}) do
+      if door.to == room.id then edgeCost = door.cost or {}; break end
+    end
+    Valuation.accumulate(snapshot, room, goalRooms, totals, edgeCost)
   end
   return Valuation.finalize(snapshot, goal, totals, #nodes)
 end

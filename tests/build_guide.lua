@@ -141,10 +141,53 @@ local function testGameAdapterCapturesOwnedItemsAndActives()
   assertEqual(normalized.collectibles[100], 2, "adapter should enumerate owned collectible counts")
   assertEqual(normalized.actives[1].id, 300, "adapter should capture active item identity")
   assertEqual(normalized.trinkets[1].id, 10, "adapter should capture held trinkets")
-  assertEqual(normalized.healthState.bone, 1, "health containers should be retained")
+  assertEqual(normalized.healthState.boneContainers, 1, "health containers should be retained")
   assertTrue(normalized.transformations.guppy, "active transformations should be detected")
   assertTrue(normalized.pills[1].identified, "identified pill state should be retained")
   assertEqual(normalized.pills[1].effect, "speed_up", "identified pill effect should be retained")
+end
+
+local function healthPlayer(playerType, red, soul, blackMask, boneContainers, maxRed)
+  return {
+    GetPlayerType = function() return playerType end,
+    GetHearts = function() return red end,
+    GetSoulHearts = function() return soul end,
+    GetBlackHearts = function() return blackMask end,
+    GetBoneHearts = function() return boneContainers end,
+    GetMaxHearts = function() return maxRed end
+  }
+end
+
+local function testGameAdapterDoesNotCountBlackHeartBitmaskAsHealth()
+  local adapter = GameAdapter.new({ playerType = { PLAYER_ISAAC = 1 } })
+  local normalized = adapter:buildPlayer(healthPlayer(1, 2, 4, 6, 0, 6))
+  assertEqual(normalized.healthState.effective, 6, "effective health should count soul hearts once")
+  assertEqual(normalized.healthState.blackMask, 6, "black-heart bitmask should be retained as metadata")
+  assertEqual(normalized.health, 6, "planner health alias should use effective half-heart health")
+  assertEqual(normalized.maxHealth, 6, "planner max-health alias should remain numeric half-heart capacity")
+end
+
+local function testGameAdapterNormalizesConservativeHealthModes()
+  local adapter = GameAdapter.new({ playerType = {
+    PLAYER_ISAAC = 1,
+    PLAYER_BLUEBABY = 2,
+    PLAYER_THEFORGOTTEN = 3,
+    PLAYER_KEEPER = 4,
+    PLAYER_THELOST = 5
+  } })
+  local red = adapter:buildPlayer(healthPlayer(1, 4, 0, 0, 0, 6))
+  local soul = adapter:buildPlayer(healthPlayer(2, 0, 6, 3, 0, 0))
+  local bone = adapter:buildPlayer(healthPlayer(3, 2, 0, 0, 1, 0))
+  local coin = adapter:buildPlayer(healthPlayer(4, 4, 0, 0, 0, 6))
+  local noHealth = adapter:buildPlayer(healthPlayer(5, 0, 0, 0, 0, 0))
+  assertEqual(red.healthState.mode, "red", "ordinary characters should use red-heart mode")
+  assertEqual(soul.healthState.mode, "soul", "no-red-container characters should use soul-heart mode")
+  assertEqual(bone.healthState.mode, "bone", "observed bone containers should select bone-heart mode")
+  assertEqual(coin.healthState.mode, "coin", "Keeper should select coin-health mode")
+  assertEqual(noHealth.healthState.mode, "soul", "no-health characters should not invent red health")
+  assertEqual(bone.healthState.effective, 2, "bone containers should not invent filled health")
+  assertEqual(bone.healthState.boneContainers, 1, "bone containers should remain explicit")
+  assertEqual(red.healthState.maxRed, 6, "red-heart capacity should remain in half-heart units")
 end
 
 local function testGameAdapterNormalizesGoldenAndSmeltedTrinkets()
@@ -335,6 +378,6 @@ local function testSaveV3MigratesDecisionSettingsSafely()
   assertEqual(saved.browser.alphabet, "Z", "browser preferences should migrate")
 end
 
-local tests = { testBuildStateNormalizesOwnedInventory, testFeatureModelAppliesOwnedSynergy, testFeatureSummaryAggregatesOwnedBuild, testTagSynergyUsesIndexedBuildFeatures, testChoiceEngineRanksTakeOverSkipWhenGoalRelevant, testChoiceEngineRejectsUnaffordablePurchase, testChoiceEngineUsesLexicographicSafetyBeforeBuildGain, testChoiceEngineExplainsChargedActiveReplacementLoss, testCatalogBuildsBaselineModelsForEveryLiveItem, testCharacterModifierAndUnknownFallbackAreExplicit, testTransformationThresholdProducesReasonCode, testCharacterRestrictionProducesWarningInsteadOfFalseSynergy, testGameAdapterCapturesOwnedItemsAndActives, testGameAdapterNormalizesGoldenAndSmeltedTrinkets, testGameAdapterTreatsJacobAndEsauTwinAsSolo, testGameAdapterStillDetectsTrueCoop, testVisibleChoiceNormalizesObservedPickupAndPrice, testVisibleActiveChoiceExposesReplacementConsequence, testVisiblePillIdentityRequiresIdentificationProbe, testAdapterCatalogsTrinketsCardsAndPills, testAdapterCapturesVisibleMachineInteractions, testAdapterExposesAvailableRerollDecision, testChoiceEngineDoesNotGuessBlindItemIdentity, testCompatibilityAPIRegistersModelsAndRules, testPlannerReturnsVisibleDecisionAlongsideRoute, testEIDIsOptionalDescriptionOnly, testSaveV3MigratesDecisionSettingsSafely }
+local tests = { testBuildStateNormalizesOwnedInventory, testFeatureModelAppliesOwnedSynergy, testFeatureSummaryAggregatesOwnedBuild, testTagSynergyUsesIndexedBuildFeatures, testChoiceEngineRanksTakeOverSkipWhenGoalRelevant, testChoiceEngineRejectsUnaffordablePurchase, testChoiceEngineUsesLexicographicSafetyBeforeBuildGain, testChoiceEngineExplainsChargedActiveReplacementLoss, testCatalogBuildsBaselineModelsForEveryLiveItem, testCharacterModifierAndUnknownFallbackAreExplicit, testTransformationThresholdProducesReasonCode, testCharacterRestrictionProducesWarningInsteadOfFalseSynergy, testGameAdapterCapturesOwnedItemsAndActives, testGameAdapterDoesNotCountBlackHeartBitmaskAsHealth, testGameAdapterNormalizesConservativeHealthModes, testGameAdapterNormalizesGoldenAndSmeltedTrinkets, testGameAdapterTreatsJacobAndEsauTwinAsSolo, testGameAdapterStillDetectsTrueCoop, testVisibleChoiceNormalizesObservedPickupAndPrice, testVisibleActiveChoiceExposesReplacementConsequence, testVisiblePillIdentityRequiresIdentificationProbe, testAdapterCatalogsTrinketsCardsAndPills, testAdapterCapturesVisibleMachineInteractions, testAdapterExposesAvailableRerollDecision, testChoiceEngineDoesNotGuessBlindItemIdentity, testCompatibilityAPIRegistersModelsAndRules, testPlannerReturnsVisibleDecisionAlongsideRoute, testEIDIsOptionalDescriptionOnly, testSaveV3MigratesDecisionSettingsSafely }
 for index, test in ipairs(tests) do test(); print("build ok " .. index) end
 print(#tests .. " build-guide tests passed")

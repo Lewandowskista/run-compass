@@ -37,8 +37,8 @@ local function baseSnapshot()
     visibility = { curseBlind = false, curseLost = false },
     player = { health = 6, maxHealth = 6, keys = 2, bombs = 2, coins = 15, power = 1 },
     rooms = {
-      { id = 1, kind = "start", visited = true, clear = true, doors = { { to = 2, slot = 0 }, { to = 4, slot = 1 } } },
-      { id = 2, kind = "treasure", visited = false, clear = false, doors = { { to = 1, slot = 2 }, { to = 3, slot = 0 } }, cost = { keys = 1 }, pickups = { { id = 1, quality = 4, visible = true } } },
+      { id = 1, kind = "start", visited = true, clear = true, doors = { { to = 2, slot = 0, cost = { keys = 1 } }, { to = 4, slot = 1 } } },
+      { id = 2, kind = "treasure", visited = false, clear = false, doors = { { to = 1, slot = 2 }, { to = 3, slot = 0 } }, pickups = { { id = 1, quality = 4, visible = true } } },
       { id = 3, kind = "boss", visited = false, clear = false, doors = { { to = 2, slot = 2 } } },
       { id = 4, kind = "shop", visited = false, clear = false, hidden = false, doors = { { to = 1, slot = 3 }, { to = 3, slot = 0 } } }
     },
@@ -377,6 +377,92 @@ local function testGameAdapterReadsLiveRoomDescriptorListApi()
   assertTrue(recommendation.status ~= "waiting", "a complete live room graph must not stay in the loading state")
 end
 
+local function testGameAdapterCallsIsLockedAndNormalizesOrdinaryKeyDoor()
+  local descriptors = {
+    { ListIndex = 0, GridIndex = 100, SafeGridIndex = 100, VisitedCount = 1, DisplayFlags = 1, Data = { Type = 1 } },
+    { ListIndex = 1, GridIndex = 101, SafeGridIndex = 101, VisitedCount = 0, DisplayFlags = 1, Data = { Type = 1 } },
+    { ListIndex = 2, GridIndex = 102, SafeGridIndex = 102, VisitedCount = 0, DisplayFlags = 1, Data = { Type = 1 } }
+  }
+  local lockedCalls = 0
+  local currentRoom = {
+    GetDoor = function(_, slot)
+      if slot == 0 then
+        return {
+          TargetRoomIndex = 101,
+          Desc = { Variant = 1 },
+          IsLocked = function()
+            lockedCalls = lockedCalls + 1
+            return true
+          end,
+          IsOpen = function() return false end
+        }
+      elseif slot == 1 then
+        return {
+          TargetRoomIndex = 102,
+          Desc = { Variant = 9 },
+          IsLocked = function()
+            lockedCalls = lockedCalls + 1
+            return false
+          end,
+          IsOpen = function() return true end
+        }
+      end
+    end
+  }
+  local level = { GetRooms = function() return descriptors end }
+  local adapter = GameAdapter.new({ roomType = {}, doorVariant = { DOOR_LOCKED = 1, DOOR_UNLOCKED = 9 } })
+  local rooms = adapter:buildRooms(level, 100, currentRoom, {})
+  local door, unlocked
+  for _, room in ipairs(rooms) do
+    if room.id == 100 then
+      for _, candidate in ipairs(room.doors) do
+        if candidate.slot == 0 then door = candidate else unlocked = candidate end
+      end
+    end
+  end
+  assertEqual(lockedCalls, 2, "door:IsLocked() should be invoked for every live door")
+  assertEqual(door.slot, 0, "door slot should be retained")
+  assertEqual(door.to, 101, "door target should be normalized to canonical room ID")
+  assertEqual(door.kind, "ordinary", "ordinary key doors should be classified explicitly")
+  assertEqual(door.locked, true, "locked state should come from the method result")
+  assertEqual(door.open, false, "open state should come from the method result")
+  assertEqual(door.cost.keys, 1, "ordinary locked doors should cost one key")
+  assertEqual(door.confidence, "high", "known ordinary lock costs should be high confidence")
+  assertEqual(unlocked.kind, "ordinary", "ordinary unlocked doors should retain their kind")
+  assertEqual(unlocked.locked, false, "unlocked method results should remain false")
+  assertEqual(unlocked.open, true, "open method results should remain true")
+  assertEqual(next(unlocked.cost), nil, "open or unlocked doors should have zero resource cost")
+  assertEqual(unlocked.confidence, "high", "observed zero-cost doors should be high confidence")
+end
+
+local function testGameAdapterMarksSpecialLockedDoorCostUnknown()
+  local descriptors = {
+    { GridIndex = 100, SafeGridIndex = 100, VisitedCount = 1, DisplayFlags = 1, Data = { Type = 1 } },
+    { GridIndex = 101, SafeGridIndex = 101, VisitedCount = 0, DisplayFlags = 1, Data = { Type = 1 } }
+  }
+  local currentRoom = {
+    GetDoor = function(_, slot)
+      if slot ~= 0 then return nil end
+      return {
+        TargetRoomIndex = 101,
+        Desc = { Variant = 2 },
+        IsLocked = function() return true end,
+        IsOpen = function() return false end
+      }
+    end
+  }
+  local adapter = GameAdapter.new({ roomType = {}, doorVariant = { DOOR_LOCKED = 1, DOOR_LOCKED_DOUBLE = 2 } })
+  local rooms = adapter:buildRooms({ GetRooms = function() return descriptors end }, 100, currentRoom, {})
+  local door
+  for _, room in ipairs(rooms) do
+    if room.id == 100 then door = room.doors[1] end
+  end
+  assertEqual(door.kind, "special", "known non-ordinary lock variants should be classified as special")
+  assertEqual(door.locked, true, "special door lock state should remain observed")
+  assertEqual(door.cost.unknown, true, "special locked doors should expose unknown resource cost")
+  assertEqual(door.confidence, "low", "unknown special lock costs should be low confidence")
+end
+
 local function testRuntimeReportsRepeatedFailureOnce()
   local messages = {}
   local runtime = Runtime.new({
@@ -567,6 +653,21 @@ local function testSearchFindsShortestRevealedPath()
   assertEqual(#result.nodes, 3, "shortest path should use two revealed doors")
 end
 
+local function testSearchRanksPathsByTraversedEdgeCost()
+  local snapshot = {
+    currentRoom = 1,
+    visibility = {},
+    rooms = {
+      { id = 1, visited = true, doors = { { to = 2, cost = { keys = 1 } }, { to = 3, cost = {} } } },
+      { id = 2, visited = true, doors = { { to = 4 } } },
+      { id = 3, visited = true, cost = { keys = 99 }, doors = { { to = 4 } } },
+      { id = 4, visited = true, doors = {} }
+    }
+  }
+  local result = Search.shortestPath(snapshot, 1, 4)
+  assertEqual(result.nodes[2], 3, "search should prefer the free traversed edge and ignore destination-room cost")
+end
+
 local function testSearchBeamIsBoundedAndCanUseOptionalDestination()
   local result = Search.beam(baseSnapshot(), { destinationRooms = { 3 } }, 12, 3)
   assertTrue(result.expanded <= 12 * 3, "beam search must remain bounded by width and horizon")
@@ -599,16 +700,18 @@ local function testValuationRanksSurvivalAndResourceMarginBeforeBuildGain()
   snapshot.player.keys = 1
   local treasure = Valuation.evaluate(snapshot, { 1, 2, 3 }, { requiredResources = { keys = 1 } })
   local shop = Valuation.evaluate(snapshot, { 1, 4, 3 }, { requiredResources = { keys = 1 } })
+  assertEqual(treasure.cost.keys, 1, "valuation should charge the traversed locked edge")
   assertTrue(Valuation.compare(shop, treasure) > 0, "resource margin should outrank a treasure detour when only one key remains")
 end
 
 local function testValuationPrefersVisibleBuildGainWhenRiskIsEqual()
   local snapshot = baseSnapshot()
   snapshot.player.keys = 2
-  snapshot.rooms[2].cost = {}
+  snapshot.rooms[1].doors[1].cost = {}
+  snapshot.rooms[2].cost = { keys = 99 }
   local treasure = Valuation.evaluate(snapshot, { 1, 2, 3 }, { requiredResources = {} })
   local shop = Valuation.evaluate(snapshot, { 1, 4, 3 }, { requiredResources = {} })
-  assertTrue(Valuation.compare(treasure, shop) > 0, "visible build gain should win after feasibility, risk, and margin tie")
+  assertTrue(Valuation.compare(treasure, shop) > 0, "visible build gain should win when only destination-room cost differs")
 end
 
 local function testMcmKeybindRowsOpenInteractivePopups()
@@ -710,6 +813,8 @@ local tests = {
   testPlannerDoesNotFollowInvalidDoorTarget,
   testRoomGraphUsesSafeGridIndexAsCanonicalId,
   testGameAdapterReadsLiveRoomDescriptorListApi,
+  testGameAdapterCallsIsLockedAndNormalizesOrdinaryKeyDoor,
+  testGameAdapterMarksSpecialLockedDoorCostUnknown,
   testRuntimeReportsRepeatedFailureOnce,
   testRuntimeDefersRenderUntilRenderCall,
   testFairPlaySnapshotRemovesSecretAndInvalidTopology,
@@ -724,6 +829,7 @@ local tests = {
   testSaveClampsUnsafeValues,
   testCatalogValidationReportsClassifiedTotals,
   testSearchFindsShortestRevealedPath,
+  testSearchRanksPathsByTraversedEdgeCost,
   testSearchBeamIsBoundedAndCanUseOptionalDestination,
   testHysteresisRejectsSmallRiskEquivalentSwitch,
   testHysteresisAllowsLargeImprovement,

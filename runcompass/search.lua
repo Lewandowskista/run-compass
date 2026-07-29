@@ -11,10 +11,22 @@ local function visible(room, flags)
   return room and not room.hidden and not room.secret and not (flags.curseLost and not room.visited)
 end
 
-local function edgeCost(room)
+local function edgeCost(door)
   local cost = 1
-  for _, amount in pairs(room and room.cost or {}) do cost = cost + (amount or 0) * 0.01 end
+  for resource, amount in pairs(door and door.cost or {}) do
+    if resource == "unknown" and amount then
+      cost = cost + 1000
+    elseif type(amount) == "number" then
+      cost = cost + amount * 0.01
+    end
+  end
   return cost
+end
+
+local function traversedEdge(rooms, from, to)
+  for _, door in ipairs(rooms[from] and rooms[from].doors or {}) do
+    if door.to == to then return door end
+  end
 end
 
 function Search.shortestPath(snapshot, start, destination)
@@ -28,7 +40,7 @@ function Search.shortestPath(snapshot, start, destination)
     for _, door in ipairs(rooms[bestNode].doors or {}) do
       local nextRoom = rooms[door.to]
       if visible(nextRoom, flags) then
-        local nextDistance = distance[bestNode] + edgeCost(nextRoom)
+        local nextDistance = distance[bestNode] + edgeCost(door)
         if distance[door.to] == nil or nextDistance < distance[door.to] then
           distance[door.to] = nextDistance
           previous[door.to] = bestNode
@@ -52,11 +64,13 @@ local function pathScore(snapshot, path, goalRooms)
   for _, id in ipairs(goalRooms or {}) do goalSet[id] = true end
   for index = 2, #path do
     local room = rooms[path[index]]
-    score = score - edgeCost(room)
-    score = score - (room.cost and room.cost.keys or 0) * 20
-    score = score - (room.cost and room.cost.bombs or 0) * 8
-    score = score - (room.cost and room.cost.coins or 0) * 0.25
-    score = score - (room.cost and room.cost.health or 0) * 15
+    local door = traversedEdge(rooms, path[index - 1], path[index])
+    local cost = door and door.cost or {}
+    score = score - edgeCost(door)
+    score = score - (cost.keys or 0) * 20
+    score = score - (cost.bombs or 0) * 8
+    score = score - (cost.coins or 0) * 0.25
+    score = score - (cost.health or 0) * 15
     if not goalSet[path[index]] then
       if room.kind == "treasure" then score = score + 2 end
       if room.kind == "shop" then score = score + 1 end

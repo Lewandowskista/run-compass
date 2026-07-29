@@ -23,8 +23,8 @@ end
 -- walk-based implementation reconstructed via parent pointers, built once
 -- per node here by extending the parent's already-built path instead of
 -- walking back from every downstream candidate) and the cumulative Valuation
--- totals for that path, built by paying each room's `Valuation.accumulate`
--- cost exactly once (when it is first visited) instead of once per
+-- totals for that path, built by paying each traversed door's
+-- `Valuation.accumulate` cost exactly once (when its target is first visited) instead of once per
 -- downstream candidate. This turns the overall candidate-ranking cost from
 -- O(rooms^2) into O(rooms + doors).
 --
@@ -48,7 +48,7 @@ local function revealedNodes(snapshot, map, goal)
         local path = table.move(current.path, 1, currentLength, 1, {})
         path[currentLength + 1] = door.to
         local totals = Valuation.cloneTotals(current.totals)
-        Valuation.accumulate(snapshot, nextRoom, goalRooms, totals)
+        Valuation.accumulate(snapshot, nextRoom, goalRooms, totals, door.cost)
         nodes[door.to] = { path = path, totals = totals }
         queue[#queue + 1] = door.to
       end
