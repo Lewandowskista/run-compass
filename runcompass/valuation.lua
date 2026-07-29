@@ -1,5 +1,6 @@
 local Valuation = {}
 local Visibility = require("runcompass.visibility")
+local Edges = require("runcompass.edges")
 
 local RESOURCE_NAMES = { "keys", "bombs", "coins", "health" }
 
@@ -25,7 +26,7 @@ end
 -- Applies one traversed edge and target room's contribution to running totals (cost, risk, raw
 -- buildGain including treasure/shop bonuses and pickup-quality gains). Callers
 -- that need per-path evaluation but not the missing-room short circuit (e.g.
--- incremental BFS accumulation) can call this directly per visited room.
+-- incremental revealed-room traversal) can call this directly per visited room.
 function Valuation.accumulate(snapshot, room, goalRooms, totals, edgeCost)
   for resource, amount in pairs(edgeCost or {}) do
     if resource == "unknown" and amount then
@@ -94,10 +95,7 @@ function Valuation.evaluate(snapshot, nodes, goal)
     local source = rooms[nodes[index - 1]]
     local room = rooms[nodes[index]]
     if not source or not room then return { feasible = false, survivalRisk = math.huge, resourceMargin = -math.huge, buildGain = 0, detour = math.huge, time = math.huge } end
-    local edgeCost = {}
-    for _, door in ipairs(source.doors or {}) do
-      if door.to == room.id then edgeCost = door.cost or {}; break end
-    end
+    local edgeCost = Edges.cost(Edges.best(source, room.id))
     Valuation.accumulate(snapshot, room, goalRooms, totals, edgeCost)
   end
   return Valuation.finalize(snapshot, goal, totals, #nodes)

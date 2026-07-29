@@ -3,6 +3,7 @@ local Visibility = require("runcompass.visibility")
 local Milestones = require("runcompass.milestones")
 local Search = require("runcompass.search")
 local Valuation = require("runcompass.valuation")
+local Edges = require("runcompass.edges")
 local Frontier = require("runcompass.frontier")
 local Recommendation = require("runcompass.recommendation")
 
@@ -36,10 +37,7 @@ local function pathResources(path, roomMap)
   for index = 2, #path do
     local source = roomMap[path[index - 1]]
     if not source or not roomMap[path[index]] then return cost end
-    local edgeCost = {}
-    for _, door in ipairs(source.doors or {}) do
-      if door.to == path[index] then edgeCost = door.cost or {}; break end
-    end
+    local edgeCost = Edges.cost(Edges.best(source, path[index]))
     for resource, amount in pairs(edgeCost) do
       if resource == "unknown" and amount then
         cost.unknown = true
@@ -96,7 +94,7 @@ local function enumeratePaths(snapshot, goal, roomMap)
     if #path >= 50 then return end
     local room = roomMap[roomId]
     if not room then return end
-    for _, door in ipairs(room.doors or {}) do
+    for _, door in ipairs(Edges.bestDoors(room)) do
       local nextRoom = roomMap[door.to]
       if nextRoom and not seen[door.to] and isVisible(nextRoom, snapshot.visibility or {}) then
         seen[door.to] = true
@@ -114,10 +112,8 @@ end
 
 local function firstDoor(snapshot, roomMap, path)
   local first = roomMap[path[1]]
-  for _, door in ipairs(first.doors or {}) do
-    if door.to == path[2] then return door.slot end
-  end
-  return nil
+  local door = Edges.best(first, path[2])
+  return door and door.slot
 end
 
 local function doorExists(snapshot, slot)

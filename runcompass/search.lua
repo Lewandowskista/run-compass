@@ -1,5 +1,6 @@
 local Search = {}
 local Visibility = require("runcompass.visibility")
+local Edges = require("runcompass.edges")
 
 local function roomMap(rooms)
   local result = {}
@@ -9,24 +10,6 @@ end
 
 local function visible(room, flags)
   return room and not room.hidden and not room.secret and not (flags.curseLost and not room.visited)
-end
-
-local function edgeCost(door)
-  local cost = 1
-  for resource, amount in pairs(door and door.cost or {}) do
-    if resource == "unknown" and amount then
-      cost = cost + 1000
-    elseif type(amount) == "number" then
-      cost = cost + amount * 0.01
-    end
-  end
-  return cost
-end
-
-local function traversedEdge(rooms, from, to)
-  for _, door in ipairs(rooms[from] and rooms[from].doors or {}) do
-    if door.to == to then return door end
-  end
 end
 
 function Search.shortestPath(snapshot, start, destination)
@@ -44,10 +27,10 @@ function Search.shortestPath(snapshot, start, destination)
     inOpen[bestNode] = nil
     settled[bestNode] = true
     if bestNode == destination then break end
-    for _, door in ipairs(rooms[bestNode].doors or {}) do
+    for _, door in ipairs(Edges.bestDoors(rooms[bestNode])) do
       local nextRoom = rooms[door.to]
       if not settled[door.to] and visible(nextRoom, flags) then
-        local nextDistance = distance[bestNode] + edgeCost(door)
+        local nextDistance = distance[bestNode] + Edges.weight(door)
         if distance[door.to] == nil or nextDistance < distance[door.to] then
           distance[door.to] = nextDistance
           previous[door.to] = bestNode
@@ -74,9 +57,9 @@ local function pathScore(snapshot, path, goalRooms)
   for _, id in ipairs(goalRooms or {}) do goalSet[id] = true end
   for index = 2, #path do
     local room = rooms[path[index]]
-    local door = traversedEdge(rooms, path[index - 1], path[index])
-    local cost = door and door.cost or {}
-    score = score - edgeCost(door)
+    local door = Edges.best(rooms[path[index - 1]], path[index])
+    local cost = Edges.cost(door)
+    score = score - Edges.weight(door)
     score = score - (cost.keys or 0) * 20
     score = score - (cost.bombs or 0) * 8
     score = score - (cost.coins or 0) * 0.25
@@ -106,6 +89,22 @@ local function candidates(snapshot, goal)
     if room.kind == "treasure" or room.kind == "shop" or room.kind == "arcade" then add(room.id) end
   end
   return result
+end
+
+local function valueLess(left, right)
+  if type(left) == "number" and type(right) == "number" then return left < right end
+  return tostring(left) < tostring(right)
+end
+
+local function stateBefore(left, right)
+  if left.score ~= right.score then return left.score > right.score end
+  if left.stops ~= right.stops then return left.stops < right.stops end
+  if left.roomId ~= right.roomId then return valueLess(left.roomId, right.roomId) end
+  local length = math.min(#left.nodes, #right.nodes)
+  for index = 1, length do
+    if left.nodes[index] ~= right.nodes[index] then return valueLess(left.nodes[index], right.nodes[index]) end
+  end
+  return #left.nodes < #right.nodes
 end
 
 function Search.beam(snapshot, goal, width, horizon)
@@ -149,16 +148,16 @@ function Search.beam(snapshot, goal, width, horizon)
         end
       end
     end
-    table.sort(nextBeam, function(left, right) return left.score > right.score end)
+    table.sort(nextBeam, stateBefore)
     beam = {}
     for index = 1, math.min(width, #nextBeam) do beam[index] = nextBeam[index] end
     retained = retained + #beam
     if #beam == 0 then break end
   end
-  table.sort(terminal, function(left, right) return left.score > right.score end)
+  table.sort(terminal, stateBefore)
   local best = terminal[1]
   if not best then
-    table.sort(beam, function(left, right) return left.score > right.score end)
+    table.sort(beam, stateBefore)
     best = beam[1]
   end
   local candidates = #terminal > 0 and terminal or beam

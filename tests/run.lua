@@ -699,6 +699,20 @@ local function testSearchKeepsFirstDiscoveredEqualCostPath()
   assertEqual(result.nodes[2], 2, "equal-cost paths should retain deterministic door discovery order")
 end
 
+local function testSearchBeamBreaksEqualScoreTiesByRoomId()
+  local snapshot = {
+    currentRoom = 1,
+    visibility = {},
+    rooms = {
+      { id = 1, visited = true, doors = { { to = 3 }, { to = 2 } } },
+      { id = 2, visited = true, doors = {} },
+      { id = 3, visited = true, doors = {} }
+    }
+  }
+  local result = Search.beam(snapshot, { destinationRooms = { 3, 2 } }, 12, 2)
+  assertEqual(result.nodes[#result.nodes], 2, "equal-score beam states should prefer the lower room ID")
+end
+
 local function testSearchBeamIsBoundedAndCanUseOptionalDestination()
   local result = Search.beam(baseSnapshot(), { destinationRooms = { 3 } }, 12, 3)
   assertTrue(result.expanded <= 12 * 3, "beam search must remain bounded by width and horizon")
@@ -743,6 +757,33 @@ local function testValuationRejectsUnaffordableEdgeWithoutReserve()
   assertEqual(evaluation.feasible, false, "actual edge costs must be affordable even without a goal reserve")
 end
 
+local function testParallelDoorsUseOneDeterministicAffordableEdge()
+  local snapshot = {
+    currentRoom = 1,
+    currentRoomClear = true,
+    mode = { kind = "normal", difficulty = "hard", coOp = false, progressionAllowed = true },
+    visibility = {},
+    player = { keys = 0, bombs = 0, coins = 0, health = 6, maxHealth = 6 },
+    rooms = {
+      { id = 1, kind = "start", visited = true, clear = true, doors = {
+        { to = 2, slot = 0, cost = { keys = 1 } },
+        { to = 2, slot = 1, cost = {} }
+      } },
+      { id = 2, kind = "boss", visited = false, clear = false, doors = {} }
+    }
+  }
+  local goal = { id = "test.parallel", kind = "boss", destinationRooms = { 2 }, requiredResources = {} }
+  local path = Search.shortestPath(snapshot, 1, 2)
+  local evaluation = Valuation.evaluate(snapshot, path.nodes, goal)
+  local recommendation = Planner.plan(snapshot, goal)
+  assertEqual(path.distance, 1, "search should price the free parallel edge")
+  assertEqual(evaluation.cost.keys, 0, "valuation should charge the same free parallel edge")
+  assertEqual(evaluation.feasible, true, "the selected parallel edge should be affordable")
+  assertEqual(recommendation.status, "ok", "planner should keep the affordable parallel route")
+  assertEqual(recommendation.nextDoorSlot, 1, "recommended slot should identify the selected free parallel edge")
+  assertEqual(recommendation.scoreVector.cost.keys, 0, "planner scoring should use the recommended edge cost")
+end
+
 local function testFrontierRejectsUnaffordableTreasureWithoutReserve()
   local snapshot = {
     currentRoom = 1,
@@ -760,6 +801,28 @@ local function testFrontierRejectsUnaffordableTreasureWithoutReserve()
   local candidate = Frontier.best(snapshot, { destinationRooms = {}, requiredResources = {}, frontier = true })
   assertEqual(candidate.nextRoomId, 3, "frontier should reject an unaffordable quality-four treasure route")
   assertEqual(candidate.evaluation.feasible, true, "frontier should return the affordable alternative")
+end
+
+local function testFrontierRelaxesToCheaperMultiHopPath()
+  local snapshot = {
+    currentRoom = 1,
+    visibility = {},
+    player = { keys = 0, health = 6, maxHealth = 6 },
+    rooms = {
+      { id = 1, visited = true, clear = true, doors = {
+        { to = 4, slot = 0, cost = { unknown = true } },
+        { to = 2, slot = 1, cost = {} }
+      } },
+      { id = 2, kind = "normal", visited = true, clear = true, doors = { { to = 3, cost = {} } } },
+      { id = 3, kind = "normal", visited = true, clear = true, doors = { { to = 4, cost = {} } } },
+      { id = 4, kind = "treasure", visited = false, clear = false, doors = {}, pickups = { { quality = 4, visible = true } } }
+    }
+  }
+  local candidate = Frontier.best(snapshot, { destinationRooms = {}, requiredResources = {}, frontier = true })
+  assertEqual(#candidate.path, 4, "frontier should relax an earlier expensive discovery to a cheaper longer path")
+  assertEqual(candidate.path[2], 2, "frontier path should traverse the free branch")
+  assertEqual(candidate.doorSlot, 1, "frontier marker should use the cheaper path's first door")
+  assertEqual(candidate.evaluation.feasible, true, "frontier should evaluate the affordable relaxed path")
 end
 
 local function testValuationPrefersVisibleBuildGainWhenRiskIsEqual()
@@ -890,13 +953,16 @@ local tests = {
   testSearchRanksPathsByTraversedEdgeCost,
   testSearchPrefersCheaperLongerPathOverEarlierDirectEdge,
   testSearchKeepsFirstDiscoveredEqualCostPath,
+  testSearchBeamBreaksEqualScoreTiesByRoomId,
   testSearchBeamIsBoundedAndCanUseOptionalDestination,
   testHysteresisRejectsSmallRiskEquivalentSwitch,
   testHysteresisAllowsLargeImprovement,
   testInvalidPreviousRecommendationIsNotPreserved,
   testValuationRanksSurvivalAndResourceMarginBeforeBuildGain,
   testFrontierRejectsUnaffordableTreasureWithoutReserve,
+  testFrontierRelaxesToCheaperMultiHopPath,
   testValuationRejectsUnaffordableEdgeWithoutReserve,
+  testParallelDoorsUseOneDeterministicAffordableEdge,
   testValuationPrefersVisibleBuildGainWhenRiskIsEqual,
   testMcmKeybindRowsOpenInteractivePopups,
   testControllerConfirmsAndCancelsGoalBrowser
