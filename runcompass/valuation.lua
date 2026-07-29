@@ -95,7 +95,8 @@ function Valuation.evaluate(snapshot, nodes, goal)
     local source = rooms[nodes[index - 1]]
     local room = rooms[nodes[index]]
     if not source or not room then return { feasible = false, survivalRisk = math.huge, resourceMargin = -math.huge, buildGain = 0, detour = math.huge, time = math.huge } end
-    local edgeCost = Edges.cost(Edges.best(source, room.id))
+    local context = Edges.context(snapshot, goal, totals.cost)
+    local edgeCost = Edges.cost(Edges.best(source, room.id, context))
     Valuation.accumulate(snapshot, room, goalRooms, totals, edgeCost)
   end
   return Valuation.finalize(snapshot, goal, totals, #nodes)

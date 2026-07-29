@@ -784,6 +784,61 @@ local function testParallelDoorsUseOneDeterministicAffordableEdge()
   assertEqual(recommendation.scoreVector.cost.keys, 0, "planner scoring should use the recommended edge cost")
 end
 
+local function testParallelDoorsPreferAffordableResourceWithoutHardCodedPreference()
+  local snapshot = {
+    currentRoom = 1,
+    currentRoomClear = true,
+    mode = { kind = "normal", difficulty = "hard", coOp = false, progressionAllowed = true },
+    visibility = {},
+    player = { keys = 0, bombs = 1, coins = 0, health = 6, maxHealth = 6 },
+    rooms = {
+      { id = 1, kind = "start", visited = true, clear = true, doors = {
+        { to = 2, slot = 0, cost = { keys = 1 } },
+        { to = 2, slot = 1, cost = { bombs = 1 } }
+      } },
+      { id = 2, kind = "treasure", visited = false, clear = false, doors = {}, pickups = { { quality = 4, visible = true } } }
+    }
+  }
+  local goal = { id = "test.resource_parallel", kind = "boss", destinationRooms = { 2 }, requiredResources = {} }
+  local path = Search.shortestPath(snapshot, 1, 2, goal)
+  local evaluation = Valuation.evaluate(snapshot, path.nodes, goal)
+  local recommendation = Planner.plan(snapshot, goal)
+  local frontier = Frontier.best(snapshot, goal)
+  assertEqual(evaluation.cost.keys, 0, "valuation should not charge the unaffordable lower-slot resource")
+  assertEqual(evaluation.cost.bombs, 1, "valuation should charge the affordable selected resource")
+  assertEqual(evaluation.feasible, true, "selected resource edge should be affordable")
+  assertEqual(recommendation.status, "ok", "planner should retain the affordable parallel resource route")
+  assertEqual(recommendation.nextDoorSlot, 1, "recommendation should identify the affordable resource edge")
+  assertEqual(recommendation.scoreVector.cost.bombs, 1, "planner score should charge the recommended edge resource")
+  assertEqual(frontier.doorSlot, 1, "frontier should use the same affordable resource edge")
+  assertEqual(frontier.evaluation.cost.bombs, 1, "frontier valuation should charge its recommended edge")
+end
+
+local function testParallelDoorsPreserveRequiredResourceReserve()
+  local snapshot = {
+    currentRoom = 1,
+    currentRoomClear = true,
+    mode = { kind = "normal", difficulty = "hard", coOp = false, progressionAllowed = true },
+    visibility = {},
+    player = { keys = 1, bombs = 1, coins = 0, health = 6, maxHealth = 6 },
+    rooms = {
+      { id = 1, kind = "start", visited = true, clear = true, doors = {
+        { to = 2, slot = 0, cost = { keys = 1 } },
+        { to = 2, slot = 1, cost = { bombs = 1 } }
+      } },
+      { id = 2, kind = "boss", visited = false, clear = false, doors = {} }
+    }
+  }
+  local goal = { id = "test.resource_reserve", kind = "boss", destinationRooms = { 2 }, requiredResources = { keys = 1 } }
+  local path = Search.shortestPath(snapshot, 1, 2, goal)
+  local evaluation = Valuation.evaluate(snapshot, path.nodes, goal)
+  local recommendation = Planner.plan(snapshot, goal)
+  assertEqual(evaluation.cost.keys, 0, "edge selection should preserve the required key reserve")
+  assertEqual(evaluation.cost.bombs, 1, "edge selection should spend the unreserved resource")
+  assertEqual(evaluation.feasible, true, "reserve-preserving parallel edge should remain feasible")
+  assertEqual(recommendation.nextDoorSlot, 1, "recommendation should use the reserve-preserving edge")
+end
+
 local function testFrontierRejectsUnaffordableTreasureWithoutReserve()
   local snapshot = {
     currentRoom = 1,
@@ -963,6 +1018,8 @@ local tests = {
   testFrontierRelaxesToCheaperMultiHopPath,
   testValuationRejectsUnaffordableEdgeWithoutReserve,
   testParallelDoorsUseOneDeterministicAffordableEdge,
+  testParallelDoorsPreserveRequiredResourceReserve,
+  testParallelDoorsPreferAffordableResourceWithoutHardCodedPreference,
   testValuationPrefersVisibleBuildGainWhenRiskIsEqual,
   testMcmKeybindRowsOpenInteractivePopups,
   testControllerConfirmsAndCancelsGoalBrowser

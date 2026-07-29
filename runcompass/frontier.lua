@@ -13,8 +13,8 @@ local function visible(room, visibility)
   return room and not room.hidden and not room.secret and not (visibility.curseLost and not room.visited)
 end
 
-local function firstDoor(current, path)
-  local door = Edges.best(current, path[2])
+local function firstDoor(current, path, snapshot, goal)
+  local door = Edges.best(current, path[2], Edges.context(snapshot, goal))
   return door and door.slot
 end
 
@@ -42,7 +42,8 @@ local function revealedNodes(snapshot, map, goal)
     settled[roomId] = true
     visitOrder[#visitOrder + 1] = roomId
     local current = nodes[roomId]
-    for _, door in ipairs(Edges.bestDoors(map[roomId])) do
+    local context = Edges.context(snapshot, goal, current.totals.cost)
+    for _, door in ipairs(Edges.bestDoors(map[roomId], context)) do
       local nextRoom = map[door.to]
       local nextDistance = current.distance + Edges.weight(door)
       if not settled[door.to] and visible(nextRoom, snapshot.visibility or {})
@@ -80,7 +81,7 @@ function Frontier.candidates(snapshot, goal)
     local node = nodes[roomId]
     local room = map[roomId]
     if room and roomId ~= snapshot.currentRoom and #node.path > 1 and (not room.visited or room.kind == "treasure" or room.kind == "shop") then
-      local slot = firstDoor(current, node.path)
+      local slot = firstDoor(current, node.path, snapshot, goal)
       if slot ~= nil then
         local pathLength = #node.path
         result[#result + 1] = {

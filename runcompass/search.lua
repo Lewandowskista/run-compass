@@ -12,11 +12,25 @@ local function visible(room, flags)
   return room and not room.hidden and not room.secret and not (flags.curseLost and not room.visited)
 end
 
-function Search.shortestPath(snapshot, start, destination)
+local function addCost(spent, door)
+  local result = {}
+  for resource, amount in pairs(spent or {}) do result[resource] = amount end
+  for resource, amount in pairs(Edges.cost(door)) do
+    if resource == "unknown" and amount then
+      result.unknown = true
+    elseif type(amount) == "number" then
+      result[resource] = (result[resource] or 0) + amount
+    end
+  end
+  return result
+end
+
+function Search.shortestPath(snapshot, start, destination, goal)
   local rooms = roomMap(snapshot.rooms)
   if not rooms[start] or not rooms[destination] then return nil end
   local flags = snapshot.visibility or {}
   local distance, previous = { [start] = 0 }, {}
+  local spent = { [start] = {} }
   local open, inOpen, settled = { start }, { [start] = true }, {}
   while #open > 0 do
     local bestIndex = 1
@@ -27,13 +41,15 @@ function Search.shortestPath(snapshot, start, destination)
     inOpen[bestNode] = nil
     settled[bestNode] = true
     if bestNode == destination then break end
-    for _, door in ipairs(Edges.bestDoors(rooms[bestNode])) do
+    local context = Edges.context(snapshot, goal, spent[bestNode])
+    for _, door in ipairs(Edges.bestDoors(rooms[bestNode], context)) do
       local nextRoom = rooms[door.to]
       if not settled[door.to] and visible(nextRoom, flags) then
         local nextDistance = distance[bestNode] + Edges.weight(door)
         if distance[door.to] == nil or nextDistance < distance[door.to] then
           distance[door.to] = nextDistance
           previous[door.to] = bestNode
+          spent[door.to] = addCost(spent[bestNode], door)
           if not inOpen[door.to] then
             open[#open + 1] = door.to
             inOpen[door.to] = true
@@ -51,19 +67,20 @@ function Search.shortestPath(snapshot, start, destination)
   return { nodes = nodes, distance = distance[destination] }
 end
 
-local function pathScore(snapshot, path, goalRooms)
+local function pathScore(snapshot, path, goalRooms, goal)
   local rooms = roomMap(snapshot.rooms)
-  local goalSet, score = {}, 0
+  local goalSet, score, spent = {}, 0, {}
   for _, id in ipairs(goalRooms or {}) do goalSet[id] = true end
   for index = 2, #path do
     local room = rooms[path[index]]
-    local door = Edges.best(rooms[path[index - 1]], path[index])
+    local door = Edges.best(rooms[path[index - 1]], path[index], Edges.context(snapshot, goal, spent))
     local cost = Edges.cost(door)
     score = score - Edges.weight(door)
     score = score - (cost.keys or 0) * 20
     score = score - (cost.bombs or 0) * 8
     score = score - (cost.coins or 0) * 0.25
     score = score - (cost.health or 0) * 15
+    spent = addCost(spent, door)
     if not goalSet[path[index]] then
       if room.kind == "treasure" then score = score + 2 end
       if room.kind == "shop" then score = score + 1 end
@@ -118,7 +135,7 @@ function Search.beam(snapshot, goal, width, horizon)
     pathCache[start] = pathCache[start] or {}
     if pathCache[start][destination] == false then return nil end
     if pathCache[start][destination] then return pathCache[start][destination] end
-    local path = Search.shortestPath(snapshot, start, destination)
+    local path = Search.shortestPath(snapshot, start, destination, goal)
     pathCache[start][destination] = path or false
     return path
   end
@@ -141,7 +158,7 @@ function Search.beam(snapshot, goal, width, horizon)
                 roomId = destination,
                 nodes = nodes,
                 stops = state.stops + 1,
-                score = state.score + pathScore(snapshot, path.nodes, goalRooms)
+                score = state.score + pathScore(snapshot, path.nodes, goalRooms, goal)
               }
             end
           end
