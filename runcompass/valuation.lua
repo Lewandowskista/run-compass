@@ -55,22 +55,19 @@ function Valuation.finalize(snapshot, goal, totals, pathLength)
   local available, required = snapshot.player or {}, goal and goal.requiredResources or {}
   local resourceMargin, feasible = 0, true
   if cost.unknown then feasible, resourceMargin = false, -math.huge end
-  -- `required` is empty for the common case (no resource requirements on this
-  -- goal, e.g. frontier exploration): skip the per-resource margin scan
-  -- entirely rather than iterating RESOURCE_NAMES only to discover nothing
-  -- was required, since this runs once per ranked candidate.
-  if next(required) ~= nil then
-    resourceMargin = cost.unknown and -math.huge or nil
-    local hasRequirement = false
-    for _, resource in ipairs(RESOURCE_NAMES) do
-      local margin = (available[resource] or 0) - (cost[resource] or 0) - (required[resource] or 0)
-      if required[resource] then
-        hasRequirement = true
-        if margin < 0 then feasible = false end
-        if not resourceMargin or margin < resourceMargin then resourceMargin = margin end
-      end
+  local hasRequirement, requiredMargin = false, nil
+  for _, resource in ipairs(RESOURCE_NAMES) do
+    local margin = (available[resource] or 0) - (cost[resource] or 0) - (required[resource] or 0)
+    if margin < 0 then feasible = false end
+    if required[resource] then
+      hasRequirement = true
+      if not requiredMargin or margin < requiredMargin then requiredMargin = margin end
     end
-    if not hasRequirement and not cost.unknown then resourceMargin = 0 end
+  end
+  if hasRequirement and not cost.unknown then
+    resourceMargin = requiredMargin
+  elseif not hasRequirement and not cost.unknown then
+    resourceMargin = 0
   end
   buildGain = buildGain - (cost.keys or 0) * 20 - (cost.bombs or 0) * 8 - (cost.coins or 0) * 0.25 - (cost.health or 0) * 15
   local maxHealth = math.max(1, available.maxHealth or available.health or 1)

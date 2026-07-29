@@ -33,18 +33,28 @@ function Search.shortestPath(snapshot, start, destination)
   local rooms = roomMap(snapshot.rooms)
   if not rooms[start] or not rooms[destination] then return nil end
   local flags = snapshot.visibility or {}
-  local distance, previous, open, head = { [start] = 0 }, {}, { start }, 1
-  while head <= #open do
-    local bestNode = open[head]; head = head + 1
+  local distance, previous = { [start] = 0 }, {}
+  local open, inOpen, settled = { start }, { [start] = true }, {}
+  while #open > 0 do
+    local bestIndex = 1
+    for index = 2, #open do
+      if distance[open[index]] < distance[open[bestIndex]] then bestIndex = index end
+    end
+    local bestNode = table.remove(open, bestIndex)
+    inOpen[bestNode] = nil
+    settled[bestNode] = true
     if bestNode == destination then break end
     for _, door in ipairs(rooms[bestNode].doors or {}) do
       local nextRoom = rooms[door.to]
-      if visible(nextRoom, flags) then
+      if not settled[door.to] and visible(nextRoom, flags) then
         local nextDistance = distance[bestNode] + edgeCost(door)
         if distance[door.to] == nil or nextDistance < distance[door.to] then
           distance[door.to] = nextDistance
           previous[door.to] = bestNode
-          open[#open + 1] = door.to
+          if not inOpen[door.to] then
+            open[#open + 1] = door.to
+            inOpen[door.to] = true
+          end
         end
       end
     end

@@ -17,6 +17,7 @@ local Runtime = require("runcompass.runtime")
 local Milestones = require("runcompass.milestones")
 local Search = require("runcompass.search")
 local Valuation = require("runcompass.valuation")
+local Frontier = require("runcompass.frontier")
 local MCM = require("runcompass.mcm")
 local UI = require("runcompass.ui")
 
@@ -668,6 +669,36 @@ local function testSearchRanksPathsByTraversedEdgeCost()
   assertEqual(result.nodes[2], 3, "search should prefer the free traversed edge and ignore destination-room cost")
 end
 
+local function testSearchPrefersCheaperLongerPathOverEarlierDirectEdge()
+  local snapshot = {
+    currentRoom = 1,
+    visibility = {},
+    rooms = {
+      { id = 1, visited = true, doors = { { to = 3, cost = { unknown = true } }, { to = 2, cost = {} } } },
+      { id = 2, visited = true, doors = { { to = 3, cost = {} } } },
+      { id = 3, visited = true, doors = {} }
+    }
+  }
+  local result = Search.shortestPath(snapshot, 1, 3)
+  assertEqual(#result.nodes, 3, "weighted search should allow a cheaper path with more edges")
+  assertEqual(result.nodes[2], 2, "unknown-cost direct edge should lose to the two-hop free route")
+end
+
+local function testSearchKeepsFirstDiscoveredEqualCostPath()
+  local snapshot = {
+    currentRoom = 1,
+    visibility = {},
+    rooms = {
+      { id = 1, visited = true, doors = { { to = 2 }, { to = 3 } } },
+      { id = 2, visited = true, doors = { { to = 4 } } },
+      { id = 3, visited = true, doors = { { to = 4 } } },
+      { id = 4, visited = true, doors = {} }
+    }
+  }
+  local result = Search.shortestPath(snapshot, 1, 4)
+  assertEqual(result.nodes[2], 2, "equal-cost paths should retain deterministic door discovery order")
+end
+
 local function testSearchBeamIsBoundedAndCanUseOptionalDestination()
   local result = Search.beam(baseSnapshot(), { destinationRooms = { 3 } }, 12, 3)
   assertTrue(result.expanded <= 12 * 3, "beam search must remain bounded by width and horizon")
@@ -702,6 +733,33 @@ local function testValuationRanksSurvivalAndResourceMarginBeforeBuildGain()
   local shop = Valuation.evaluate(snapshot, { 1, 4, 3 }, { requiredResources = { keys = 1 } })
   assertEqual(treasure.cost.keys, 1, "valuation should charge the traversed locked edge")
   assertTrue(Valuation.compare(shop, treasure) > 0, "resource margin should outrank a treasure detour when only one key remains")
+end
+
+local function testValuationRejectsUnaffordableEdgeWithoutReserve()
+  local snapshot = baseSnapshot()
+  snapshot.player.keys = 0
+  local evaluation = Valuation.evaluate(snapshot, { 1, 2 }, { requiredResources = {} })
+  assertEqual(evaluation.cost.keys, 1, "valuation should retain the actual traversed key cost")
+  assertEqual(evaluation.feasible, false, "actual edge costs must be affordable even without a goal reserve")
+end
+
+local function testFrontierRejectsUnaffordableTreasureWithoutReserve()
+  local snapshot = {
+    currentRoom = 1,
+    visibility = {},
+    player = { keys = 0, health = 6, maxHealth = 6 },
+    rooms = {
+      { id = 1, visited = true, clear = true, doors = {
+        { to = 2, slot = 0, cost = { keys = 1 } },
+        { to = 3, slot = 1, cost = {} }
+      } },
+      { id = 2, kind = "treasure", visited = false, clear = false, doors = {}, pickups = { { quality = 4, visible = true } } },
+      { id = 3, kind = "normal", visited = false, clear = false, doors = {}, pickups = {} }
+    }
+  }
+  local candidate = Frontier.best(snapshot, { destinationRooms = {}, requiredResources = {}, frontier = true })
+  assertEqual(candidate.nextRoomId, 3, "frontier should reject an unaffordable quality-four treasure route")
+  assertEqual(candidate.evaluation.feasible, true, "frontier should return the affordable alternative")
 end
 
 local function testValuationPrefersVisibleBuildGainWhenRiskIsEqual()
@@ -830,11 +888,15 @@ local tests = {
   testCatalogValidationReportsClassifiedTotals,
   testSearchFindsShortestRevealedPath,
   testSearchRanksPathsByTraversedEdgeCost,
+  testSearchPrefersCheaperLongerPathOverEarlierDirectEdge,
+  testSearchKeepsFirstDiscoveredEqualCostPath,
   testSearchBeamIsBoundedAndCanUseOptionalDestination,
   testHysteresisRejectsSmallRiskEquivalentSwitch,
   testHysteresisAllowsLargeImprovement,
   testInvalidPreviousRecommendationIsNotPreserved,
   testValuationRanksSurvivalAndResourceMarginBeforeBuildGain,
+  testFrontierRejectsUnaffordableTreasureWithoutReserve,
+  testValuationRejectsUnaffordableEdgeWithoutReserve,
   testValuationPrefersVisibleBuildGainWhenRiskIsEqual,
   testMcmKeybindRowsOpenInteractivePopups,
   testControllerConfirmsAndCancelsGoalBrowser
