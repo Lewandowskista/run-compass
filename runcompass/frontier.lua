@@ -65,6 +65,37 @@ local function revealedStates(snapshot, map, goal)
   return settledStates
 end
 
+local function candidateRoom(node, map, snapshot)
+  local room = map[node.roomId]
+  if node.active == false or not room or node.roomId == snapshot.currentRoom or node.pathLength <= 1 then return nil end
+  if room.visited and room.kind ~= "treasure" and room.kind ~= "shop" then return nil end
+  return room
+end
+
+local function candidateForState(node, room, snapshot, goal)
+  local path, edges = Edges.materialize(node)
+  local slot = edges[1] and edges[1].slot
+  if slot == nil then return nil end
+  local evaluation = node.evaluation or Valuation.finalize(snapshot, goal, node.totals, node.pathLength)
+  return {
+    doorSlot = slot,
+    nextRoomId = room.id,
+    path = path,
+    nodes = path,
+    edges = edges,
+    cost = node.cost,
+    distance = node.distance,
+    pathLength = node.pathLength,
+    roomKind = room.kind,
+    evaluation = evaluation,
+    reasonCodes = {
+      ranked_frontier = true,
+      treasure_detour = room.kind == "treasure",
+      shop_detour = room.kind == "shop"
+    }
+  }
+end
+
 function Frontier.candidates(snapshot, goal)
   local map = roomMap(snapshot.rooms)
   local current = map[snapshot.currentRoom]
@@ -72,31 +103,10 @@ function Frontier.candidates(snapshot, goal)
   local settledStates = revealedStates(snapshot, map, goal)
   local result = {}
   for _, node in ipairs(settledStates) do
-    local room = map[node.roomId]
-    if node.active ~= false and room and node.roomId ~= snapshot.currentRoom and node.pathLength > 1
-        and (not room.visited or room.kind == "treasure" or room.kind == "shop") then
-      local path, edges = Edges.materialize(node)
-      local slot = edges[1] and edges[1].slot
-      if slot ~= nil then
-        local pathLength = node.pathLength
-        result[#result + 1] = {
-          doorSlot = slot,
-          nextRoomId = room.id,
-          path = path,
-          nodes = path,
-          edges = edges,
-          cost = node.cost,
-          distance = node.distance,
-          pathLength = pathLength,
-          roomKind = room.kind,
-          evaluation = Valuation.finalize(snapshot, goal, node.totals, pathLength),
-          reasonCodes = {
-            ranked_frontier = true,
-            treasure_detour = room.kind == "treasure",
-            shop_detour = room.kind == "shop"
-          }
-        }
-      end
+    local room = candidateRoom(node, map, snapshot)
+    if room then
+      local candidate = candidateForState(node, room, snapshot, goal)
+      if candidate then result[#result + 1] = candidate end
     end
   end
   return result
@@ -108,16 +118,25 @@ local function candidateBefore(left, right)
   local compared = compare(left.evaluation, right.evaluation)
   if compared ~= 0 then return compared > 0 end
   if left.pathLength ~= right.pathLength then return left.pathLength < right.pathLength end
-  if left.nextRoomId ~= right.nextRoomId then return left.nextRoomId < right.nextRoomId end
+  local leftRoomId, rightRoomId = left.nextRoomId or left.roomId, right.nextRoomId or right.roomId
+  if leftRoomId ~= rightRoomId then return leftRoomId < rightRoomId end
   return Edges.stateBefore(left, right)
 end
 
 function Frontier.best(snapshot, goal)
-  local best
-  for _, candidate in ipairs(Frontier.candidates(snapshot, goal)) do
-    if not best or candidateBefore(candidate, best) then best = candidate end
+  local map = roomMap(snapshot.rooms)
+  if not map[snapshot.currentRoom] then return nil end
+  local best, bestRoom
+  for _, node in ipairs(revealedStates(snapshot, map, goal)) do
+    local room = candidateRoom(node, map, snapshot)
+    if room then
+      node.evaluation = Valuation.finalize(snapshot, goal, node.totals, node.pathLength)
+      if not best or candidateBefore(node, best) then
+        best, bestRoom = node, room
+      end
+    end
   end
-  return best
+  return best and candidateForState(best, bestRoom, snapshot, goal) or nil
 end
 
 return Frontier

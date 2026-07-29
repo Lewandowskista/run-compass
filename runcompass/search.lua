@@ -40,29 +40,48 @@ function Search.shortestPath(snapshot, start, destination, goal, initialCost)
     local state = table.remove(open, bestIndex)
     if state.active ~= false and not state.expanded then
       state.expanded = true
-      if state.roomId == destination then
-        return { nodes = state.nodes, edges = state.edges, cost = state.cost, distance = state.distance }
-      end
-      local context = Edges.context(snapshot, goal, state.cost)
-      for _, door in ipairs(Edges.feasibleDoors(rooms[state.roomId], context)) do
-        local nextRoom = rooms[door.to]
-        if visible(nextRoom, flags) then
-          local candidate = {
-            roomId = door.to,
-            nodes = copyAppend(state.nodes, door.to),
-            edges = copyAppend(state.edges, door),
-            cost = Edges.addCost(state.cost, door),
-            distance = state.distance + Edges.weight(door)
-          }
-          labels[door.to] = labels[door.to] or {}
-          if Edges.addLabel(labels[door.to], candidate) then
-            open[#open + 1] = candidate
+      if state.roomId ~= destination then
+        local context = Edges.context(snapshot, goal, state.cost)
+        for _, door in ipairs(Edges.feasibleDoors(rooms[state.roomId], context)) do
+          local nextRoom = rooms[door.to]
+          if visible(nextRoom, flags) then
+            local candidate = {
+              roomId = door.to,
+              nodes = copyAppend(state.nodes, door.to),
+              edges = copyAppend(state.edges, door),
+              cost = Edges.addCost(state.cost, door),
+              distance = state.distance + Edges.weight(door)
+            }
+            labels[door.to] = labels[door.to] or {}
+            if Edges.addLabel(labels[door.to], candidate) then
+              open[#open + 1] = candidate
+            end
           end
         end
       end
     end
   end
-  return nil
+  local candidates = {}
+  for _, state in ipairs(labels[destination] or {}) do
+    if state.active ~= false then
+      candidates[#candidates + 1] = {
+        nodes = state.nodes,
+        edges = state.edges,
+        cost = state.cost,
+        distance = state.distance
+      }
+    end
+  end
+  table.sort(candidates, Edges.stateBefore)
+  local best = candidates[1]
+  if not best then return nil end
+  return {
+    nodes = best.nodes,
+    edges = best.edges,
+    cost = best.cost,
+    distance = best.distance,
+    candidates = candidates
+  }
 end
 
 local function pathScore(snapshot, path, edges, goalRooms, goal, initialCost)
@@ -141,20 +160,22 @@ function Search.beam(snapshot, goal, width, horizon)
           if destination ~= state.roomId then
             local path = Search.shortestPath(snapshot, state.roomId, destination, goal, state.cost)
             if path then
-              local nodes = {}
-              local edges = {}
-              for _, node in ipairs(state.nodes) do nodes[#nodes + 1] = node end
-              for index = 2, #path.nodes do nodes[#nodes + 1] = path.nodes[index] end
-              for _, edge in ipairs(state.edges or {}) do edges[#edges + 1] = edge end
-              for _, edge in ipairs(path.edges or {}) do edges[#edges + 1] = edge end
-              nextBeam[#nextBeam + 1] = {
-                roomId = destination,
-                nodes = nodes,
-                edges = edges,
-                cost = path.cost,
-                stops = state.stops + 1,
-                score = state.score + pathScore(snapshot, path.nodes, path.edges, goalRooms, goal, state.cost)
-              }
+              for _, route in ipairs(path.candidates or { path }) do
+                local nodes = {}
+                local edges = {}
+                for _, node in ipairs(state.nodes) do nodes[#nodes + 1] = node end
+                for index = 2, #route.nodes do nodes[#nodes + 1] = route.nodes[index] end
+                for _, edge in ipairs(state.edges or {}) do edges[#edges + 1] = edge end
+                for _, edge in ipairs(route.edges or {}) do edges[#edges + 1] = edge end
+                nextBeam[#nextBeam + 1] = {
+                  roomId = destination,
+                  nodes = nodes,
+                  edges = edges,
+                  cost = route.cost,
+                  stops = state.stops + 1,
+                  score = state.score + pathScore(snapshot, route.nodes, route.edges, goalRooms, goal, state.cost)
+                }
+              end
             end
           end
         end

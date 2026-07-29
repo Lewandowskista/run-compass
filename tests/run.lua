@@ -873,6 +873,33 @@ local function testRoutePreservesParetoResourceStateForDownstreamEdge()
   assertEqual(frontier.evaluation.feasible, true, "frontier's retained Pareto state should be feasible")
 end
 
+local function testDirectGoalRetainsParetoEdgesForPlannerValuation()
+  local snapshot = {
+    currentRoom = 1,
+    currentRoomClear = true,
+    mode = { kind = "normal", difficulty = "hard", coOp = false, progressionAllowed = true },
+    visibility = {},
+    player = { keys = 1, bombs = 1, coins = 0, health = 6, maxHealth = 6 },
+    rooms = {
+      { id = 1, kind = "start", visited = true, clear = true, doors = {
+        { to = 2, slot = 0, cost = { keys = 1 } },
+        { to = 2, slot = 1, cost = { bombs = 1 } }
+      } },
+      { id = 2, kind = "treasure", visited = false, clear = false, doors = {}, pickups = {} }
+    }
+  }
+  local goal = { id = "test.direct_pareto_goal", kind = "boss", destinationRooms = { 2 }, requiredResources = {} }
+  local path = Search.shortestPath(snapshot, 1, 2, goal)
+  local recommendation = Planner.plan(snapshot, goal)
+  assertEqual(path.edges[1].slot, 0, "shortest-path compatibility default should remain deterministic")
+  assertEqual(#path.candidates, 2, "search should expose both nondominated destination histories")
+  assertEqual(path.candidates[1].edges[1].slot, 0, "destination alternatives should retain deterministic slot order")
+  assertEqual(path.candidates[2].edges[1].slot, 1, "destination alternatives should retain the bomb edge")
+  assertEqual(recommendation.nextDoorSlot, 1, "planner valuation should prefer spending a bomb over a key")
+  assertEqual(recommendation.scoreVector.cost.keys, 0, "planner should retain the key on its selected route")
+  assertEqual(recommendation.scoreVector.cost.bombs, 1, "planner should charge the selected bomb edge")
+end
+
 local function testRouteFiltersSoleInfeasibleEdge()
   local snapshot = {
     currentRoom = 1,
@@ -1079,6 +1106,7 @@ local tests = {
   testParallelDoorsPreferAffordableResourceWithoutHardCodedPreference,
   testRouteFiltersSoleInfeasibleEdge,
   testRoutePreservesParetoResourceStateForDownstreamEdge,
+  testDirectGoalRetainsParetoEdgesForPlannerValuation,
   testValuationPrefersVisibleBuildGainWhenRiskIsEqual,
   testMcmKeybindRowsOpenInteractivePopups,
   testControllerConfirmsAndCancelsGoalBrowser
