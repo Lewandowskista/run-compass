@@ -839,6 +839,63 @@ local function testParallelDoorsPreserveRequiredResourceReserve()
   assertEqual(recommendation.nextDoorSlot, 1, "recommendation should use the reserve-preserving edge")
 end
 
+local function testRoutePreservesParetoResourceStateForDownstreamEdge()
+  local snapshot = {
+    currentRoom = 1,
+    currentRoomClear = true,
+    mode = { kind = "normal", difficulty = "hard", coOp = false, progressionAllowed = true },
+    visibility = {},
+    player = { keys = 1, bombs = 1, coins = 0, health = 6, maxHealth = 6 },
+    rooms = {
+      { id = 1, kind = "start", visited = true, clear = true, doors = {
+        { to = 2, slot = 0, cost = { keys = 1 } },
+        { to = 2, slot = 1, cost = { bombs = 1 } }
+      } },
+      { id = 2, kind = "normal", visited = true, clear = true, doors = {
+        { to = 3, slot = 2, cost = { keys = 1 } }
+      } },
+      { id = 3, kind = "treasure", visited = false, clear = false, doors = {}, pickups = { { quality = 4, visible = true } } }
+    }
+  }
+  local goal = { id = "test.pareto_route", kind = "boss", destinationRooms = { 3 }, requiredResources = {} }
+  local path = Search.shortestPath(snapshot, 1, 3, goal)
+  local recommendation = Planner.plan(snapshot, goal)
+  local frontier = Frontier.best(snapshot, goal)
+  assertEqual(recommendation.status, "ok", "planner should retain the feasible bomb-entry then key-exit route")
+  assertEqual(path.edges[1].slot, 1, "search should preserve the nondominated bomb-entry edge")
+  assertEqual(path.edges[2].slot, 2, "search should preserve the downstream key edge")
+  assertEqual(path.cost.keys, 1, "search should charge the downstream key exactly once")
+  assertEqual(path.cost.bombs, 1, "search should charge the retained bomb-entry state")
+  assertEqual(recommendation.nextDoorSlot, 1, "recommendation should use the exact feasible first edge")
+  assertEqual(recommendation.scoreVector.cost.keys, 1, "planner valuation should retain exact key history")
+  assertEqual(recommendation.scoreVector.cost.bombs, 1, "planner valuation should retain exact bomb history")
+  assertEqual(frontier.doorSlot, 1, "frontier should preserve the same feasible first edge")
+  assertEqual(frontier.evaluation.feasible, true, "frontier's retained Pareto state should be feasible")
+end
+
+local function testRouteFiltersSoleInfeasibleEdge()
+  local snapshot = {
+    currentRoom = 1,
+    currentRoomClear = true,
+    mode = { kind = "normal", difficulty = "hard", coOp = false, progressionAllowed = true },
+    visibility = {},
+    player = { keys = 0, bombs = 0, coins = 0, health = 6, maxHealth = 6 },
+    rooms = {
+      { id = 1, kind = "start", visited = true, clear = true, doors = {
+        { to = 2, slot = 0, cost = { keys = 1 } }
+      } },
+      { id = 2, kind = "treasure", visited = false, clear = false, doors = {}, pickups = { { quality = 4, visible = true } } }
+    }
+  }
+  local goal = { id = "test.infeasible_edge", kind = "boss", destinationRooms = { 2 }, requiredResources = {} }
+  local path = Search.shortestPath(snapshot, 1, 2, goal)
+  local frontier = Frontier.best(snapshot, goal)
+  local recommendation = Planner.plan(snapshot, goal)
+  assertEqual(path, nil, "search should filter a sole unaffordable edge")
+  assertEqual(frontier, nil, "frontier should not expose a candidate behind a sole unaffordable edge")
+  assertEqual(recommendation.status, "unreachable", "planner should reject the filtered route")
+end
+
 local function testFrontierRejectsUnaffordableTreasureWithoutReserve()
   local snapshot = {
     currentRoom = 1,
@@ -1020,6 +1077,8 @@ local tests = {
   testParallelDoorsUseOneDeterministicAffordableEdge,
   testParallelDoorsPreserveRequiredResourceReserve,
   testParallelDoorsPreferAffordableResourceWithoutHardCodedPreference,
+  testRouteFiltersSoleInfeasibleEdge,
+  testRoutePreservesParetoResourceStateForDownstreamEdge,
   testValuationPrefersVisibleBuildGainWhenRiskIsEqual,
   testMcmKeybindRowsOpenInteractivePopups,
   testControllerConfirmsAndCancelsGoalBrowser

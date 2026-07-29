@@ -12,75 +12,74 @@ local function visible(room, flags)
   return room and not room.hidden and not room.secret and not (flags.curseLost and not room.visited)
 end
 
-local function addCost(spent, door)
+local function copyAppend(values, value)
   local result = {}
-  for resource, amount in pairs(spent or {}) do result[resource] = amount end
-  for resource, amount in pairs(Edges.cost(door)) do
-    if resource == "unknown" and amount then
-      result.unknown = true
-    elseif type(amount) == "number" then
-      result[resource] = (result[resource] or 0) + amount
-    end
-  end
+  for index, item in ipairs(values or {}) do result[index] = item end
+  result[#result + 1] = value
   return result
 end
 
-function Search.shortestPath(snapshot, start, destination, goal)
+function Search.shortestPath(snapshot, start, destination, goal, initialCost)
   local rooms = roomMap(snapshot.rooms)
   if not rooms[start] or not rooms[destination] then return nil end
   local flags = snapshot.visibility or {}
-  local distance, previous = { [start] = 0 }, {}
-  local spent = { [start] = {} }
-  local open, inOpen, settled = { start }, { [start] = true }, {}
+  local startState = {
+    roomId = start,
+    nodes = { start },
+    edges = {},
+    cost = initialCost or {},
+    distance = 0,
+    active = true
+  }
+  local labels, open = { [start] = { startState } }, { startState }
   while #open > 0 do
     local bestIndex = 1
     for index = 2, #open do
-      if distance[open[index]] < distance[open[bestIndex]] then bestIndex = index end
+      if Edges.stateBefore(open[index], open[bestIndex]) then bestIndex = index end
     end
-    local bestNode = table.remove(open, bestIndex)
-    inOpen[bestNode] = nil
-    settled[bestNode] = true
-    if bestNode == destination then break end
-    local context = Edges.context(snapshot, goal, spent[bestNode])
-    for _, door in ipairs(Edges.bestDoors(rooms[bestNode], context)) do
-      local nextRoom = rooms[door.to]
-      if not settled[door.to] and visible(nextRoom, flags) then
-        local nextDistance = distance[bestNode] + Edges.weight(door)
-        if distance[door.to] == nil or nextDistance < distance[door.to] then
-          distance[door.to] = nextDistance
-          previous[door.to] = bestNode
-          spent[door.to] = addCost(spent[bestNode], door)
-          if not inOpen[door.to] then
-            open[#open + 1] = door.to
-            inOpen[door.to] = true
+    local state = table.remove(open, bestIndex)
+    if state.active ~= false and not state.expanded then
+      state.expanded = true
+      if state.roomId == destination then
+        return { nodes = state.nodes, edges = state.edges, cost = state.cost, distance = state.distance }
+      end
+      local context = Edges.context(snapshot, goal, state.cost)
+      for _, door in ipairs(Edges.feasibleDoors(rooms[state.roomId], context)) do
+        local nextRoom = rooms[door.to]
+        if visible(nextRoom, flags) then
+          local candidate = {
+            roomId = door.to,
+            nodes = copyAppend(state.nodes, door.to),
+            edges = copyAppend(state.edges, door),
+            cost = Edges.addCost(state.cost, door),
+            distance = state.distance + Edges.weight(door)
+          }
+          labels[door.to] = labels[door.to] or {}
+          if Edges.addLabel(labels[door.to], candidate) then
+            open[#open + 1] = candidate
           end
         end
       end
     end
   end
-  if distance[destination] == nil then return nil end
-  local nodes, current = {}, destination
-  while current do
-    table.insert(nodes, 1, current)
-    current = previous[current]
-  end
-  return { nodes = nodes, distance = distance[destination] }
+  return nil
 end
 
-local function pathScore(snapshot, path, goalRooms, goal)
+local function pathScore(snapshot, path, edges, goalRooms, goal, initialCost)
   local rooms = roomMap(snapshot.rooms)
-  local goalSet, score, spent = {}, 0, {}
+  local goalSet, score, spent = {}, 0, initialCost or {}
   for _, id in ipairs(goalRooms or {}) do goalSet[id] = true end
   for index = 2, #path do
     local room = rooms[path[index]]
-    local door = Edges.best(rooms[path[index - 1]], path[index], Edges.context(snapshot, goal, spent))
+    local door = edges and edges[index - 1]
+      or Edges.best(rooms[path[index - 1]], path[index], Edges.context(snapshot, goal, spent))
     local cost = Edges.cost(door)
     score = score - Edges.weight(door)
     score = score - (cost.keys or 0) * 20
     score = score - (cost.bombs or 0) * 8
     score = score - (cost.coins or 0) * 0.25
     score = score - (cost.health or 0) * 15
-    spent = addCost(spent, door)
+    spent = Edges.addCost(spent, door)
     if not goalSet[path[index]] then
       if room.kind == "treasure" then score = score + 2 end
       if room.kind == "shop" then score = score + 1 end
@@ -129,16 +128,7 @@ function Search.beam(snapshot, goal, width, horizon)
   local goalRooms, destinations = goal.destinationRooms or {}, candidates(snapshot, goal)
   local goalSet = {}
   for _, id in ipairs(goalRooms) do goalSet[id] = true end
-  local beam = { { roomId = snapshot.currentRoom, nodes = { snapshot.currentRoom }, stops = 0, score = 0 } }
-  local pathCache = {}
-  local function cachedPath(start, destination)
-    pathCache[start] = pathCache[start] or {}
-    if pathCache[start][destination] == false then return nil end
-    if pathCache[start][destination] then return pathCache[start][destination] end
-    local path = Search.shortestPath(snapshot, start, destination, goal)
-    pathCache[start][destination] = path or false
-    return path
-  end
+  local beam = { { roomId = snapshot.currentRoom, nodes = { snapshot.currentRoom }, edges = {}, cost = {}, stops = 0, score = 0 } }
   local terminal = {}
   local retained = 0
   for _ = 1, horizon do
@@ -149,16 +139,21 @@ function Search.beam(snapshot, goal, width, horizon)
       else
         for _, destination in ipairs(destinations) do
           if destination ~= state.roomId then
-            local path = cachedPath(state.roomId, destination)
+            local path = Search.shortestPath(snapshot, state.roomId, destination, goal, state.cost)
             if path then
               local nodes = {}
+              local edges = {}
               for _, node in ipairs(state.nodes) do nodes[#nodes + 1] = node end
               for index = 2, #path.nodes do nodes[#nodes + 1] = path.nodes[index] end
+              for _, edge in ipairs(state.edges or {}) do edges[#edges + 1] = edge end
+              for _, edge in ipairs(path.edges or {}) do edges[#edges + 1] = edge end
               nextBeam[#nextBeam + 1] = {
                 roomId = destination,
                 nodes = nodes,
+                edges = edges,
+                cost = path.cost,
                 stops = state.stops + 1,
-                score = state.score + pathScore(snapshot, path.nodes, goalRooms, goal)
+                score = state.score + pathScore(snapshot, path.nodes, path.edges, goalRooms, goal, state.cost)
               }
             end
           end
@@ -178,7 +173,8 @@ function Search.beam(snapshot, goal, width, horizon)
     best = beam[1]
   end
   local candidates = #terminal > 0 and terminal or beam
-  return best and { nodes = best.nodes, score = best.score, expanded = retained, candidates = candidates } or { nodes = {}, score = -math.huge, expanded = retained, candidates = {} }
+  return best and { nodes = best.nodes, edges = best.edges, cost = best.cost, score = best.score, expanded = retained, candidates = candidates }
+    or { nodes = {}, edges = {}, cost = {}, score = -math.huge, expanded = retained, candidates = {} }
 end
 
 return Search

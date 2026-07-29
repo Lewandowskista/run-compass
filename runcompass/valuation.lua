@@ -86,7 +86,7 @@ function Valuation.finalize(snapshot, goal, totals, pathLength)
   }
 end
 
-function Valuation.evaluate(snapshot, nodes, goal)
+function Valuation.evaluate(snapshot, nodes, goal, edges)
   local rooms = roomMap(snapshot.rooms)
   local totals = Valuation.newTotals()
   local goalRooms = {}
@@ -96,7 +96,8 @@ function Valuation.evaluate(snapshot, nodes, goal)
     local room = rooms[nodes[index]]
     if not source or not room then return { feasible = false, survivalRisk = math.huge, resourceMargin = -math.huge, buildGain = 0, detour = math.huge, time = math.huge } end
     local context = Edges.context(snapshot, goal, totals.cost)
-    local edgeCost = Edges.cost(Edges.best(source, room.id, context))
+    local edge = edges and edges[index - 1] or Edges.best(source, room.id, context)
+    local edgeCost = Edges.cost(edge)
     Valuation.accumulate(snapshot, room, goalRooms, totals, edgeCost)
   end
   return Valuation.finalize(snapshot, goal, totals, #nodes)

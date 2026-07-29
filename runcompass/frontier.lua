@@ -13,81 +13,80 @@ local function visible(room, visibility)
   return room and not room.hidden and not room.secret and not (visibility.curseLost and not room.visited)
 end
 
-local function firstDoor(current, path, snapshot, goal)
-  local door = Edges.best(current, path[2], Edges.context(snapshot, goal))
-  return door and door.slot
-end
-
--- Deterministic Dijkstra traversal of revealed rooms. Each settled room
--- carries the cheapest known room-id path and the cumulative valuation totals
--- for the exact selected edges on that path. A cheaper relaxation replaces
--- both together, so cost and path identity cannot diverge.
---
--- Every node's `path` and `totals` are its own independent tables (never
--- shared with a parent or sibling), since `nodes[roomId]` stays alive and is
--- read again later when building that room's candidate entry.
-local function revealedNodes(snapshot, map, goal)
+-- Deterministic multi-label traversal of revealed rooms. Each room retains
+-- every nondominated scalar-distance/resource-cost state, with independent
+-- edge and valuation histories. Parent links keep rejected labels cheap;
+-- complete node/edge arrays are materialized only for retained candidates.
+local function revealedStates(snapshot, map, goal)
   local start = snapshot.currentRoom
   local goalRooms = {}
   for _, id in ipairs(goal and goal.destinationRooms or {}) do goalRooms[id] = true end
-  local nodes = { [start] = { path = { start }, totals = Valuation.newTotals(), distance = 0 } }
-  local open, inOpen, settled, visitOrder = { start }, { [start] = true }, {}, {}
+  local startTotals = Valuation.newTotals()
+  local startState = {
+    roomId = start,
+    totals = startTotals,
+    cost = startTotals.cost,
+    distance = 0,
+    pathLength = 1
+  }
+  local labels, open, settledStates = { [start] = {} }, {}, {}
+  Edges.addLabel(labels[start], startState)
+  open[1] = startState
   while #open > 0 do
     local bestIndex = 1
     for index = 2, #open do
-      if nodes[open[index]].distance < nodes[open[bestIndex]].distance then bestIndex = index end
+      if Edges.stateBefore(open[index], open[bestIndex]) then bestIndex = index end
     end
-    local roomId = table.remove(open, bestIndex)
-    inOpen[roomId] = nil
-    settled[roomId] = true
-    visitOrder[#visitOrder + 1] = roomId
-    local current = nodes[roomId]
-    local context = Edges.context(snapshot, goal, current.totals.cost)
-    for _, door in ipairs(Edges.bestDoors(map[roomId], context)) do
-      local nextRoom = map[door.to]
-      local nextDistance = current.distance + Edges.weight(door)
-      if not settled[door.to] and visible(nextRoom, snapshot.visibility or {})
-          and (not nodes[door.to] or nextDistance < nodes[door.to].distance) then
-        local currentLength = #current.path
-        local path = table.move(current.path, 1, currentLength, 1, {})
-        path[currentLength + 1] = door.to
-        local totals = Valuation.cloneTotals(current.totals)
-        Valuation.accumulate(snapshot, nextRoom, goalRooms, totals, Edges.cost(door))
-        nodes[door.to] = { path = path, totals = totals, distance = nextDistance }
-        if not inOpen[door.to] then
-          open[#open + 1] = door.to
-          inOpen[door.to] = true
+    local state = table.remove(open, bestIndex)
+    if state.active ~= false and not state.expanded then
+      state.expanded = true
+      settledStates[#settledStates + 1] = state
+      local context = Edges.context(snapshot, goal, state.cost)
+      for _, door in ipairs(Edges.feasibleDoors(map[state.roomId], context)) do
+        local nextRoom = map[door.to]
+        if visible(nextRoom, snapshot.visibility or {}) then
+          local totals = Valuation.cloneTotals(state.totals)
+          Valuation.accumulate(snapshot, nextRoom, goalRooms, totals, Edges.cost(door))
+          local candidate = {
+            roomId = door.to,
+            parent = state,
+            edge = door,
+            totals = totals,
+            cost = totals.cost,
+            distance = state.distance + Edges.weight(door),
+            pathLength = state.pathLength + 1
+          }
+          labels[door.to] = labels[door.to] or {}
+          if Edges.addLabel(labels[door.to], candidate) then open[#open + 1] = candidate end
         end
       end
     end
   end
-  -- `visitOrder` holds every settled room id in deterministic weighted order, so
-  -- it doubles as an ordered visit list callers can walk instead of using
-  -- `pairs(nodes)` (unordered hash iteration).
-  return nodes, visitOrder
+  return settledStates
 end
 
 function Frontier.candidates(snapshot, goal)
   local map = roomMap(snapshot.rooms)
   local current = map[snapshot.currentRoom]
   if not current then return {} end
-  local nodes, visitOrder = revealedNodes(snapshot, map, goal)
+  local settledStates = revealedStates(snapshot, map, goal)
   local result = {}
-  -- Every revealed, reachable room already appears at most once in
-  -- `visitOrder` (Dijkstra settles each room id once), so no separate "seen" dedup
-  -- table or repeated `visible()` re-check is needed here: `nodes` already
-  -- reflects exactly the rooms `visible()` would accept.
-  for _, roomId in ipairs(visitOrder) do
-    local node = nodes[roomId]
-    local room = map[roomId]
-    if room and roomId ~= snapshot.currentRoom and #node.path > 1 and (not room.visited or room.kind == "treasure" or room.kind == "shop") then
-      local slot = firstDoor(current, node.path, snapshot, goal)
+  for _, node in ipairs(settledStates) do
+    local room = map[node.roomId]
+    if node.active ~= false and room and node.roomId ~= snapshot.currentRoom and node.pathLength > 1
+        and (not room.visited or room.kind == "treasure" or room.kind == "shop") then
+      local path, edges = Edges.materialize(node)
+      local slot = edges[1] and edges[1].slot
       if slot ~= nil then
-        local pathLength = #node.path
+        local pathLength = node.pathLength
         result[#result + 1] = {
           doorSlot = slot,
           nextRoomId = room.id,
-          path = node.path,
+          path = path,
+          nodes = path,
+          edges = edges,
+          cost = node.cost,
+          distance = node.distance,
           pathLength = pathLength,
           roomKind = room.kind,
           evaluation = Valuation.finalize(snapshot, goal, node.totals, pathLength),
@@ -105,15 +104,20 @@ end
 
 local compare = Valuation.compare
 
+local function candidateBefore(left, right)
+  local compared = compare(left.evaluation, right.evaluation)
+  if compared ~= 0 then return compared > 0 end
+  if left.pathLength ~= right.pathLength then return left.pathLength < right.pathLength end
+  if left.nextRoomId ~= right.nextRoomId then return left.nextRoomId < right.nextRoomId end
+  return Edges.stateBefore(left, right)
+end
+
 function Frontier.best(snapshot, goal)
-  local candidates = Frontier.candidates(snapshot, goal)
-  table.sort(candidates, function(left, right)
-    local compared = compare(left.evaluation, right.evaluation)
-    if compared ~= 0 then return compared > 0 end
-    if left.pathLength ~= right.pathLength then return left.pathLength < right.pathLength end
-    return left.nextRoomId < right.nextRoomId
-  end)
-  return candidates[1]
+  local best
+  for _, candidate in ipairs(Frontier.candidates(snapshot, goal)) do
+    if not best or candidateBefore(candidate, best) then best = candidate end
+  end
+  return best
 end
 
 return Frontier

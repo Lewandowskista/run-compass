@@ -32,13 +32,14 @@ local function isVisible(room, visibility)
   return true
 end
 
-local function pathResources(path, roomMap, snapshot, goal)
+local function pathResources(path, roomMap, snapshot, goal, edges)
   local cost = { keys = 0, bombs = 0, coins = 0, health = 0 }
   for index = 2, #path do
     local source = roomMap[path[index - 1]]
     if not source or not roomMap[path[index]] then return cost end
     local context = Edges.context(snapshot, goal, cost)
-    local edgeCost = Edges.cost(Edges.best(source, path[index], context))
+    local edge = edges and edges[index - 1] or Edges.best(source, path[index], context)
+    local edgeCost = Edges.cost(edge)
     for resource, amount in pairs(edgeCost) do
       if resource == "unknown" and amount then
         cost.unknown = true
@@ -83,25 +84,33 @@ local function enumeratePaths(snapshot, goal, roomMap)
   local current = snapshot.currentRoom
   local seen = { [current] = true }
   local path = { current }
+  local edges = {}
 
   local function visit(roomId)
     if destinations[roomId] then
-      local cost = pathResources(path, roomMap, snapshot, goal)
+      local cost = pathResources(path, roomMap, snapshot, goal, edges)
       if canAfford(snapshot, goal, cost) then
-        paths[#paths + 1] = { nodes = { table.unpack(path) }, cost = cost, score = pathScore(path, roomMap, cost, snapshot.visibility or {}) }
+        paths[#paths + 1] = {
+          nodes = { table.unpack(path) },
+          edges = { table.unpack(edges) },
+          cost = cost,
+          score = pathScore(path, roomMap, cost, snapshot.visibility or {})
+        }
       end
       return
     end
     if #path >= 50 then return end
     local room = roomMap[roomId]
     if not room then return end
-    local spent = pathResources(path, roomMap, snapshot, goal)
-    for _, door in ipairs(Edges.bestDoors(room, Edges.context(snapshot, goal, spent))) do
+    local spent = pathResources(path, roomMap, snapshot, goal, edges)
+    for _, door in ipairs(Edges.feasibleDoors(room, Edges.context(snapshot, goal, spent))) do
       local nextRoom = roomMap[door.to]
       if nextRoom and not seen[door.to] and isVisible(nextRoom, snapshot.visibility or {}) then
         seen[door.to] = true
         path[#path + 1] = door.to
+        edges[#edges + 1] = door
         visit(door.to)
+        edges[#edges] = nil
         path[#path] = nil
         seen[door.to] = nil
       end
@@ -112,7 +121,8 @@ local function enumeratePaths(snapshot, goal, roomMap)
   return paths
 end
 
-local function firstDoor(snapshot, roomMap, path, goal)
+local function firstDoor(snapshot, roomMap, path, goal, edges)
+  if edges and edges[1] then return edges[1].slot end
   local first = roomMap[path[1]]
   local door = Edges.best(first, path[2], Edges.context(snapshot, goal))
   return door and door.slot
@@ -170,13 +180,13 @@ local function recommendationForPath(snapshot, roomMap, candidate, goal)
   if #steps == 0 then steps[1] = "Goal room reached" end
   return {
     status = "ok",
-    nextDoorSlot = firstDoor(snapshot, roomMap, candidate.nodes, goal),
+    nextDoorSlot = firstDoor(snapshot, roomMap, candidate.nodes, goal, candidate.edges),
     steps = steps,
     score = candidate.evaluation and candidate.evaluation.utility or candidate.score,
     scoreVector = candidate.evaluation,
     reasonCodes = {
       goal_feasible = true,
-      resource_reservation = next(candidate.cost) ~= nil,
+      resource_reservation = next(goal.requiredResources or {}) ~= nil or next(candidate.cost) ~= nil,
       bounded_search = candidate.boundedSearch == true
     },
     confidence = "medium",
@@ -253,24 +263,24 @@ function Planner.plan(snapshot, goal, previous, decisionModels)
   local destinationSet = copySet(goal.destinationRooms)
   local beam = Search.beam(snapshot, goal, 12, 3)
   local beamDestination = beam.nodes[#beam.nodes]
-  local beamCost = pathResources(beam.nodes, roomMap, snapshot, goal)
+  local beamCost = beam.cost or pathResources(beam.nodes, roomMap, snapshot, goal, beam.edges)
   local paths = {}
   for _, state in ipairs(beam.candidates or {}) do
     local destination = state.nodes[#state.nodes]
     if #state.nodes > 1 and destinationSet[destination] then
-      local cost = pathResources(state.nodes, roomMap, snapshot, goal)
-      local evaluation = Valuation.evaluate(snapshot, state.nodes, goal)
+      local cost = state.cost or pathResources(state.nodes, roomMap, snapshot, goal, state.edges)
+      local evaluation = Valuation.evaluate(snapshot, state.nodes, goal, state.edges)
       if canAfford(snapshot, goal, cost) and evaluation.feasible then
-        paths[#paths + 1] = { nodes = state.nodes, cost = cost, score = state.score, evaluation = evaluation, boundedSearch = true }
+        paths[#paths + 1] = { nodes = state.nodes, edges = state.edges, cost = cost, score = state.score, evaluation = evaluation, boundedSearch = true }
       end
     end
   end
   if #paths == 0 and #beam.nodes > 1 and destinationSet[beamDestination] and canAfford(snapshot, goal, beamCost) then
-    paths[1] = { nodes = beam.nodes, cost = beamCost, score = beam.score, evaluation = Valuation.evaluate(snapshot, beam.nodes, goal), boundedSearch = true }
+    paths[1] = { nodes = beam.nodes, edges = beam.edges, cost = beamCost, score = beam.score, evaluation = Valuation.evaluate(snapshot, beam.nodes, goal, beam.edges), boundedSearch = true }
   end
   if #paths == 0 then
     for _, candidate in ipairs(enumeratePaths(snapshot, goal, roomMap)) do
-      candidate.evaluation = Valuation.evaluate(snapshot, candidate.nodes, goal)
+      candidate.evaluation = Valuation.evaluate(snapshot, candidate.nodes, goal, candidate.edges)
       paths[#paths + 1] = candidate
     end
   end
