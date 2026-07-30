@@ -70,7 +70,7 @@ local function testChoiceEngineRanksTakeOverSkipWhenGoalRelevant()
     { id = "pedestal.1", kind = "collectible", roomId = 1, observedIdentity = { id = 200, quality = 4 }, position = { x = 80, y = 60 }, confidence = "high" },
     { id = "skip.1", kind = "skip", roomId = 1, position = { x = 80, y = 60 }, confidence = "high" }
   }
-  local result = ChoiceEngine.evaluate(snapshot, choices, { id = "boss.delirium", destinationRooms = {} })
+  local result = ChoiceEngine.evaluate(snapshot, choices, { id = "boss.delirium", destinationRooms = {} }, ItemModels.new({ [200] = { effects = { bossDamage = 5 } } }))
   assertEqual(result.primary.action, "take", "goal-relevant collectible should beat skip")
   assertTrue(#result.alternatives <= 2, "comparison should expose at most two alternatives")
 end
@@ -253,8 +253,50 @@ end
 local function testVisibleActiveChoiceExposesReplacementConsequence()
   local adapter = GameAdapter.new({ pickupVariant = { PICKUP_COLLECTIBLE = 100 }, activeItemType = 3, itemConfig = { GetCollectible = function() return { Name = "Active", Quality = 3, Type = 3 } end } })
   local choice = adapter:buildVisibleChoice({ Variant = 100, SubType = 200, Position = { X = 1, Y = 2 } }, 1, { curseBlind = false })
-  assertEqual(choice.action, "replace_active", "active pedestals should expose replacement action")
+  assertEqual(choice.action, "replace", "active pedestals should expose replacement action")
   assertTrue(choice.replacement and choice.replacement.kind == "active", "active replacement consequence should be explicit")
+end
+
+local function testVisibleChoiceMapsPickupPriceConstantsToResourceCosts()
+  local adapter = GameAdapter.new({
+    pickupVariant = { PICKUP_COLLECTIBLE = 100 },
+    pickupPrice = { PRICE_TWO_HEARTS = -2, PRICE_ONE_SOUL_HEART = -3, PRICE_SPIKES = -9 },
+    itemConfig = { GetCollectible = function() return { Name = "Devil Item", Quality = 4 } end }
+  })
+  local red = adapter:buildVisibleChoice({ Variant = 100, SubType = 200, Price = -2, InitSeed = 1 }, 1, { curseBlind = false })
+  assertEqual(red.resourceCost.redHearts, 4, "red-heart prices should use half-heart units")
+  assertEqual(red.cost.kind, "red_hearts", "red-heart price should be typed")
+  local soul = adapter:buildVisibleChoice({ Variant = 100, SubType = 201, Price = -3, InitSeed = 2 }, 1, { curseBlind = false })
+  assertEqual(soul.resourceCost.soulHearts, 2, "soul-heart prices should use half-heart units")
+  assertEqual(soul.cost.kind, "soul_hearts", "soul-heart price should be typed")
+  local spikes = adapter:buildVisibleChoice({ Variant = 100, SubType = 202, Price = -9, InitSeed = 3 }, 1, { curseBlind = false })
+  assertEqual(spikes.resourceCost.spikes, 1, "spike prices should be represented without pretending they are coins")
+end
+
+local function testUnknownPickupPriceMakesAcquisitionInsufficientInformation()
+  local adapter = GameAdapter.new({ pickupVariant = { PICKUP_COLLECTIBLE = 100 }, itemConfig = { GetCollectible = function() return { Name = "Odd Price", Quality = 1 } end } })
+  local choices = adapter:buildVisibleChoiceAlternatives({ Variant = 100, SubType = 200, Price = -99, InitSeed = 42, Position = { X = 8, Y = 9 } }, 3, { curseBlind = false })
+  assertEqual(#choices, 2, "unknown-cost pickup should still expose acquisition plus skip")
+  assertEqual(choices[1].action, "buy", "visible acquisition action should remain explicit")
+  assertEqual(choices[1].availability, "unknown_cost", "unknown price must be infeasible instead of guessed")
+  assertEqual(choices[2].action, "skip", "safe skip must remain available")
+end
+
+local function testVisibleChoiceAlternativesIncludeHoldForActiveReplacement()
+  local adapter = GameAdapter.new({ pickupVariant = { PICKUP_COLLECTIBLE = 100 }, activeItemType = 3, itemConfig = { GetCollectible = function() return { Name = "Active", Quality = 3, Type = 3 } end } })
+  local choices = adapter:buildVisibleChoiceAlternatives({ Variant = 100, SubType = 200, InitSeed = 44 }, 1, { curseBlind = false })
+  assertEqual(#choices, 3, "active replacement should expose replace, hold, and skip")
+  assertEqual(choices[1].action, "replace", "replacement action should be explicit")
+  assertEqual(choices[2].action, "hold", "holding the current active should be an explicit alternative")
+  assertEqual(choices[3].action, "skip", "skipping the option group should be explicit")
+end
+
+local function testSafeAlternativesDoNotInheritCandidateItemValue()
+  local adapter = GameAdapter.new({ pickupVariant = { PICKUP_COLLECTIBLE = 100 }, itemConfig = { GetCollectible = function() return { Name = "Damage", Quality = 4 } end } })
+  local choices = adapter:buildVisibleChoiceAlternatives({ Variant = 100, SubType = 200, InitSeed = 45 }, 1, { curseBlind = false })
+  local result = ChoiceEngine.evaluate({ player = { characterToken = "isaac" } }, choices, {}, ItemModels.new({ [200] = { effects = { bossDamage = 5 } } }))
+  assertEqual(result.primary.action, "take", "candidate value should belong only to the acquisition choice")
+  assertTrue(result.skip and not result.skip.effectDelta.bossDamage, "skip must not inherit the candidate item model")
 end
 
 local function testVisiblePillIdentityRequiresIdentificationProbe()
@@ -282,19 +324,42 @@ local function testAdapterCatalogsTrinketsCardsAndPills()
 end
 
 local function testAdapterCapturesVisibleMachineInteractions()
-  local adapter = GameAdapter.new({ entityType = { ENTITY_SLOT = 6 }, isaac = { FindByType = function() return { { InitSeed = 88, Variant = 2, SubType = 4, Price = 3, Position = { X = 20, Y = 30 } } } end } })
+  local adapter = GameAdapter.new({ entityType = { ENTITY_SLOT = 6 }, slotVariant = { SLOT_MACHINE = 2 }, isaac = { FindByType = function() return { { InitSeed = 88, Variant = 2, SubType = 4, Price = 3, Position = { X = 20, Y = 30 } } } end } })
   local choices = adapter:buildInteractionChoices(5, { curseBlind = false })
   assertEqual(#choices, 1, "visible slot interactions should be captured")
   assertEqual(choices[1].kind, "machine", "slot interaction should use machine kind")
   assertEqual(choices[1].price, 3, "machine cost should be retained")
+  assertEqual(choices[1].availability, "unsupported", "machines should remain descriptive until deterministic value is modeled")
+  assertEqual(choices[1].observedIdentity.slotClass, "slot_machine", "supported slot variants should be classified by name")
+end
+
+local function testAdapterDescribesUnknownMachineVariantsConservatively()
+  local adapter = GameAdapter.new({ entityType = { ENTITY_SLOT = 6 }, slotVariant = { SLOT_MACHINE = 2 }, isaac = { FindByType = function() return { { InitSeed = 89, Variant = 999, Price = 1 } } end } })
+  local choices = adapter:buildInteractionChoices(5, { curseBlind = false })
+  assertEqual(choices[1].observedIdentity.slotClass, "unknown", "unknown slot variants should not be folded into known machines")
+  assertEqual(choices[1].availability, "unsupported", "unknown machines must not be recommended")
 end
 
 local function testAdapterExposesAvailableRerollDecision()
-  local adapter = GameAdapter.new({ rerollActives = { [105] = true } })
-  local choice = adapter:buildRerollChoice({ actives = { { id = 105, slot = 0, charge = 6 } } }, 2)
+  local adapter = GameAdapter.new({ rerollActives = { [105] = true }, itemConfig = { GetCollectible = function() return { MaxCharges = 6 } end } })
+  local choice = adapter:buildRerollChoice({ actives = { { id = 105, slot = 0, charge = 6 } } }, 2, {
+    { id = "2:pedestal", roomId = 2, kind = "collectible", observedIdentity = { id = 200 } }
+  })
   assertTrue(choice ~= nil, "available reroll active should become a decision")
   assertEqual(choice.kind, "reroll", "reroll choice should be classified")
   assertEqual(choice.action, "reroll", "reroll action should be explicit")
+  assertEqual(choice.targetIds[1], "2:pedestal", "reroll advice must point at an observed visible target")
+  assertEqual(choice.availability, "insufficient_information", "unsupported reroll expected-value comparison should not become confident advice")
+end
+
+local function testAdapterSuppressesRerollWithoutFullChargeOrTarget()
+  local adapter = GameAdapter.new({ rerollActives = { [105] = true }, itemConfig = { GetCollectible = function() return { MaxCharges = 6 } end } })
+  local partial = adapter:buildRerollChoice({ actives = { { id = 105, slot = 0, charge = 5 } } }, 2, {
+    { id = "2:pedestal", roomId = 2, kind = "collectible", observedIdentity = { id = 200 } }
+  })
+  assertTrue(partial == nil, "partial charge must not produce reroll advice")
+  local noTarget = adapter:buildRerollChoice({ actives = { { id = 105, slot = 0, charge = 6 } } }, 2, {})
+  assertTrue(noTarget == nil, "rerolls without visible targets must be suppressed")
 end
 
 local function testChoiceEngineDoesNotGuessBlindItemIdentity()
@@ -312,6 +377,25 @@ local function testChoiceEngineRejectsUnaffordablePurchase()
   }, {})
   assertEqual(result.primary.action, "skip", "unaffordable purchases should not beat skip")
   assertTrue(result.alternatives[1] and result.alternatives[1].warnings[1] == "insufficient_coins", "unaffordable choice should be explained")
+end
+
+local function testChoiceEnginePreservesRouteReserveWhenRankingPurchases()
+  local result = ChoiceEngine.evaluate({ player = { characterToken = "isaac", resources = { coins = 15 } }, visibility = {} }, {
+    { id = "shop.1", kind = "collectible", action = "buy", resourceCost = { coins = 15 }, observedIdentity = { id = 200 }, confidence = "high" },
+    { id = "skip.1", kind = "skip", confidence = "high" }
+  }, { resourceReserve = { coins = 1 } })
+  assertEqual(result.primary.action, "skip", "purchases must preserve resources reserved for the route")
+  assertTrue(result.alternatives[1] and result.alternatives[1].warnings[1] == "route_reserve_required", "route reserve pressure should be explicit")
+end
+
+local function testChoiceEngineTreatsUnknownCostAsInsufficientInformation()
+  local result = ChoiceEngine.evaluate({ player = { characterToken = "isaac", resources = { coins = 99 } }, visibility = {} }, {
+    { id = "deal.1", kind = "collectible", action = "buy", availability = "unknown_cost", observedIdentity = { id = 200 }, confidence = "low" },
+    { id = "skip.1", kind = "skip", confidence = "high" }
+  }, {})
+  assertEqual(result.primary.action, "skip", "unknown acquisition costs must not outrank safe alternatives")
+  assertEqual(result.alternatives[1].action, "insufficient_information", "unknown-cost acquisition should be explicit insufficient information")
+  assertTrue(result.alternatives[1].reasonCodes.insufficient_information, "unknown-cost reasoning should be machine-readable")
 end
 
 local function testChoiceEngineUsesLexicographicSafetyBeforeBuildGain()
@@ -378,6 +462,6 @@ local function testSaveV3MigratesDecisionSettingsSafely()
   assertEqual(saved.browser.alphabet, "Z", "browser preferences should migrate")
 end
 
-local tests = { testBuildStateNormalizesOwnedInventory, testFeatureModelAppliesOwnedSynergy, testFeatureSummaryAggregatesOwnedBuild, testTagSynergyUsesIndexedBuildFeatures, testChoiceEngineRanksTakeOverSkipWhenGoalRelevant, testChoiceEngineRejectsUnaffordablePurchase, testChoiceEngineUsesLexicographicSafetyBeforeBuildGain, testChoiceEngineExplainsChargedActiveReplacementLoss, testCatalogBuildsBaselineModelsForEveryLiveItem, testCharacterModifierAndUnknownFallbackAreExplicit, testTransformationThresholdProducesReasonCode, testCharacterRestrictionProducesWarningInsteadOfFalseSynergy, testGameAdapterCapturesOwnedItemsAndActives, testGameAdapterDoesNotCountBlackHeartBitmaskAsHealth, testGameAdapterNormalizesConservativeHealthModes, testGameAdapterNormalizesGoldenAndSmeltedTrinkets, testGameAdapterTreatsJacobAndEsauTwinAsSolo, testGameAdapterStillDetectsTrueCoop, testVisibleChoiceNormalizesObservedPickupAndPrice, testVisibleActiveChoiceExposesReplacementConsequence, testVisiblePillIdentityRequiresIdentificationProbe, testAdapterCatalogsTrinketsCardsAndPills, testAdapterCapturesVisibleMachineInteractions, testAdapterExposesAvailableRerollDecision, testChoiceEngineDoesNotGuessBlindItemIdentity, testCompatibilityAPIRegistersModelsAndRules, testPlannerReturnsVisibleDecisionAlongsideRoute, testEIDIsOptionalDescriptionOnly, testSaveV3MigratesDecisionSettingsSafely }
+local tests = { testBuildStateNormalizesOwnedInventory, testFeatureModelAppliesOwnedSynergy, testFeatureSummaryAggregatesOwnedBuild, testTagSynergyUsesIndexedBuildFeatures, testChoiceEngineRanksTakeOverSkipWhenGoalRelevant, testChoiceEngineRejectsUnaffordablePurchase, testChoiceEnginePreservesRouteReserveWhenRankingPurchases, testChoiceEngineTreatsUnknownCostAsInsufficientInformation, testChoiceEngineUsesLexicographicSafetyBeforeBuildGain, testChoiceEngineExplainsChargedActiveReplacementLoss, testCatalogBuildsBaselineModelsForEveryLiveItem, testCharacterModifierAndUnknownFallbackAreExplicit, testTransformationThresholdProducesReasonCode, testCharacterRestrictionProducesWarningInsteadOfFalseSynergy, testGameAdapterCapturesOwnedItemsAndActives, testGameAdapterDoesNotCountBlackHeartBitmaskAsHealth, testGameAdapterNormalizesConservativeHealthModes, testGameAdapterNormalizesGoldenAndSmeltedTrinkets, testGameAdapterTreatsJacobAndEsauTwinAsSolo, testGameAdapterStillDetectsTrueCoop, testVisibleChoiceNormalizesObservedPickupAndPrice, testVisibleActiveChoiceExposesReplacementConsequence, testVisibleChoiceMapsPickupPriceConstantsToResourceCosts, testUnknownPickupPriceMakesAcquisitionInsufficientInformation, testVisibleChoiceAlternativesIncludeHoldForActiveReplacement, testSafeAlternativesDoNotInheritCandidateItemValue, testVisiblePillIdentityRequiresIdentificationProbe, testAdapterCatalogsTrinketsCardsAndPills, testAdapterCapturesVisibleMachineInteractions, testAdapterDescribesUnknownMachineVariantsConservatively, testAdapterExposesAvailableRerollDecision, testAdapterSuppressesRerollWithoutFullChargeOrTarget, testChoiceEngineDoesNotGuessBlindItemIdentity, testCompatibilityAPIRegistersModelsAndRules, testPlannerReturnsVisibleDecisionAlongsideRoute, testEIDIsOptionalDescriptionOnly, testSaveV3MigratesDecisionSettingsSafely }
 for index, test in ipairs(tests) do test(); print("build ok " .. index) end
 print(#tests .. " build-guide tests passed")

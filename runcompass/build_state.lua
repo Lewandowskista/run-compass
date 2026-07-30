@@ -16,6 +16,11 @@ end
 
 function BuildState.fromPlayer(player)
   player = player or {}
+  local health = clone(player.healthState or { current = player.health or 0, max = player.maxHealth or player.health or 0 })
+  local resources = clone(player.resources or { keys = player.keys or 0, bombs = player.bombs or 0, coins = player.coins or 0 })
+  if resources.redHearts == nil and health.red ~= nil then resources.redHearts = health.red end
+  if resources.soulHearts == nil and health.soul ~= nil then resources.soulHearts = health.soul end
+  if resources.effectiveHealth == nil and health.effective ~= nil then resources.effectiveHealth = health.effective end
   return {
     actorToken = player.actorToken or player.characterToken,
     characterToken = player.characterToken,
@@ -29,8 +34,8 @@ function BuildState.fromPlayer(player)
     transformations = clone(player.transformations or {}),
     temporaryEffects = clone(player.temporaryEffects or {}),
     stats = clone(player.stats or { damage = player.damage or player.power or 0 }),
-    health = clone(player.healthState or { current = player.health or 0, max = player.maxHealth or player.health or 0 }),
-    resources = clone(player.resources or { keys = player.keys or 0, bombs = player.bombs or 0, coins = player.coins or 0 }),
+    health = health,
+    resources = resources,
     inventoryLimits = clone(player.inventoryLimits or {}),
     featureSummary = clone(player.featureSummary or {}),
     applicableRuleIds = clone(player.applicableRuleIds or {})

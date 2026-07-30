@@ -24,13 +24,23 @@ local function actionFor(choice)
   return "take"
 end
 
+local function unavailableWarning(availability)
+  if availability == "unknown_cost" then return "unknown_cost" end
+  if availability == "unsupported" then return "unsupported_mechanic" end
+  if availability == "insufficient_information" then return "insufficient_information" end
+  return nil
+end
+
 local function better(left, right)
   local leftVector, rightVector = left.scoreVector, right.scoreVector
   local fields = { { "feasible", true }, { "survival", true }, { "resourceMargin", true }, { "goalUtility", true }, { "buildGain", true }, { "volatility", false }, { "detour", false } }
   for _, field in ipairs(fields) do
     local key, higher = field[1], field[2]
     local a, b = leftVector[key] or 0, rightVector[key] or 0
-    if a ~= b then return higher and a > b or a < b end
+    if a ~= b then
+      if higher then return a > b end
+      return a < b
+    end
   end
   return left.choiceId < right.choiceId
 end
@@ -50,7 +60,7 @@ function ChoiceEngine.evaluate(snapshot, choices, goal, models, descriptions)
       actorBuild.actorToken = actorToken
       local model = models:evaluate(item.id, actorBuild, goal, choice.kind)
       local effects = model.effects or {}
-      if choice.replacement and action == "replace_active" then
+      if choice.replacement and (action == "replace" or action == "replace_active") then
         local charged = false
         for _, active in ipairs(build.actives or {}) do
           if (tonumber(active.id) or 0) > 0 and ((tonumber(active.charge) or 0) > 0 or (tonumber(active.batteryCharge) or 0) > 0) then charged = true; break end
@@ -67,14 +77,26 @@ function ChoiceEngine.evaluate(snapshot, choices, goal, models, descriptions)
       local feasible = true
       local resourceWarnings = {}
       local available = build.resources or {}
+      local reserve = (goal and (goal.resourceReserve or goal.reserve)) or {}
       local costs = choice.resourceCost or ((tonumber(choice.price) or 0) > 0 and { coins = tonumber(choice.price) } or {})
+      local unavailable = unavailableWarning(choice.availability)
+      if unavailable then
+        feasible = false
+        table.insert(resourceWarnings, unavailable)
+        model.reasonCodes.insufficient_information = true
+        action = "insufficient_information"
+      end
       for resource, amount in pairs(costs) do
         if resource ~= "activeCharge" and (available[resource] or 0) < (tonumber(amount) or 0) then
           feasible = false
           resourceWarnings[#resourceWarnings + 1] = resource == "coins" and "insufficient_coins" or "insufficient_resource"
+        elseif resource ~= "activeCharge" and (available[resource] or 0) < ((tonumber(amount) or 0) + (tonumber(reserve[resource]) or 0)) then
+          feasible = false
+          resourceWarnings[#resourceWarnings + 1] = "route_reserve_required"
         end
       end
       if identityHidden then
+        feasible = false
         action = "insufficient_information"
         table.insert(model.warnings, 1, "identity_hidden")
         model.reasonCodes.insufficient_information = true
@@ -110,7 +132,6 @@ function ChoiceEngine.evaluate(snapshot, choices, goal, models, descriptions)
     if evaluation.action == "skip" then result.skip = evaluation end
   end
   for index = 2, math.min(3, #evaluations) do result.alternatives[#result.alternatives + 1] = evaluations[index] end
-  if result.primary and result.primary.action == "skip" and result.skip == result.primary and evaluations[2] and evaluations[2].scoreVector.feasible == 1 then result.primary = evaluations[2] end
   return result
 end
 

@@ -34,6 +34,20 @@ local function values(container)
   return result
 end
 
+local function cloneTable(value)
+  if type(value) ~= "table" then return value end
+  local result = {}
+  for key, item in pairs(value) do result[key] = cloneTable(item) end
+  return result
+end
+
+local function constantMatches(constants, price, names)
+  for _, name in ipairs(names) do
+    if constants[name] ~= nil and tonumber(constants[name]) == price then return true end
+  end
+  return false
+end
+
 function GameAdapter.new(env)
   return setmetatable({ env = env, observationRooms = {}, observationChoices = {}, floorToken = nil }, GameAdapter)
 end
@@ -112,6 +126,33 @@ function GameAdapter:collectConfigured(kind, max)
     if item then result[#result + 1] = { id = id, kind = kind, name = item.Name, quality = item.Quality, tags = item.Tags } end
   end
   return result
+end
+
+function GameAdapter:normalizePickupCost(rawPrice)
+  local price = tonumber(rawPrice) or 0
+  local constants = self.env.pickupPrice or rawget(_G, "PickupPrice") or {}
+  if price > 0 then return { kind = "coins", resources = { coins = price }, confidence = "high", supported = true } end
+  if price == 0 or constantMatches(constants, price, { "PRICE_FREE" }) then return { kind = "free", resources = {}, confidence = "high", supported = true } end
+  if constantMatches(constants, price, { "PRICE_ONE_HEART", "PRICE_ONE_RED_HEART" }) then
+    return { kind = "red_hearts", resources = { redHearts = 2 }, confidence = "high", supported = true }
+  end
+  if constantMatches(constants, price, { "PRICE_TWO_HEARTS", "PRICE_TWO_RED_HEARTS" }) then
+    return { kind = "red_hearts", resources = { redHearts = 4 }, confidence = "high", supported = true }
+  end
+  if constantMatches(constants, price, { "PRICE_ONE_SOUL_HEART", "PRICE_ONE_SOULHEART", "PRICE_ONE_SOUL_HEARTS" }) then
+    return { kind = "soul_hearts", resources = { soulHearts = 2 }, confidence = "high", supported = true }
+  end
+  if constantMatches(constants, price, { "PRICE_TWO_SOUL_HEARTS", "PRICE_TWO_SOULHEARTS" }) then
+    return { kind = "soul_hearts", resources = { soulHearts = 4 }, confidence = "high", supported = true }
+  end
+  if constantMatches(constants, price, { "PRICE_ONE_HEART_AND_TWO_SOULHEARTS", "PRICE_ONE_HEART_AND_TWO_SOUL_HEARTS" }) then
+    return { kind = "mixed_hearts", resources = { redHearts = 2, soulHearts = 4 }, confidence = "high", supported = true }
+  end
+  if constantMatches(constants, price, { "PRICE_SPIKES", "PRICE_SPIKE", "PRICE_SPIKES_ONCE" }) then
+    return { kind = "spikes", resources = { spikes = 1 }, confidence = "medium", supported = false }
+  end
+  if price < 0 then return { kind = "unsupported", resources = {}, confidence = "low", supported = false, unknown = true } end
+  return { kind = "free", resources = {}, confidence = "high", supported = true }
 end
 
 function GameAdapter:buildPlayer(player)
@@ -268,22 +309,74 @@ function GameAdapter:buildVisibleChoice(pickup, roomId, visibility)
   end
   local option = pickup.OptionsPickupIndex
   local isActive = itemConfigEntry and tonumber(itemConfigEntry.Type) == tonumber(self.env.activeItemType or 3)
+  local cost = self:normalizePickupCost(pickup.Price)
+  local acquisitionAction = cost.kind ~= "free" and "buy" or (isActive and "replace" or "take")
+  local itemNeedsIdentity = kind == "collectible" or kind == "trinket" or kind == "card" or kind == "pill"
+  local availability = "available"
+  if cost.unknown then availability = "unknown_cost"
+  elseif itemNeedsIdentity and identity == nil then availability = "insufficient_information" end
   return {
     id = tostring(roomId) .. ":" .. tostring(pickup.InitSeed or pickup.Index or pickup.SubType or "pickup"),
     roomId = roomId,
     position = { x = position.X or 0, y = position.Y or 0 },
     kind = kind,
-    action = (tonumber(pickup.Price) or 0) > 0 and "buy" or (isActive and "replace_active" or nil),
+    action = acquisitionAction,
     choiceGroupId = tostring(roomId) .. ":" .. tostring(option or pickup.ShopItemId or pickup.InitSeed or "solo"),
     observedIdentity = identity,
     price = tonumber(pickup.Price) or 0,
-    resourceCost = { coins = math.max(0, tonumber(pickup.Price) or 0) },
+    cost = { kind = cost.kind, confidence = cost.confidence },
+    resourceCost = cloneTable(cost.resources),
+    availability = availability,
     eligibleActors = { "primary" },
     replacement = isActive and { kind = "active", consequence = "replace_or_hold" } or nil,
-    confidence = identity and "high" or "low",
+    confidence = (identity and cost.confidence == "high") and "high" or "low",
     source = "observed_pickup",
     visible = not visibility.curseBlind
   }
+end
+
+function GameAdapter:buildVisibleChoiceAlternatives(pickup, roomId, visibility)
+  local acquisition = self:buildVisibleChoice(pickup, roomId, visibility)
+  local choices = { acquisition }
+  if acquisition.replacement then
+    local hold = {
+      id = acquisition.id .. ":hold",
+      roomId = acquisition.roomId,
+      position = acquisition.position,
+      kind = "hold",
+      action = "hold",
+      choiceGroupId = acquisition.choiceGroupId,
+      observedIdentity = nil,
+      price = 0,
+      cost = { kind = "free", confidence = "high" },
+      resourceCost = {},
+      availability = "available",
+      eligibleActors = acquisition.eligibleActors,
+      replacement = acquisition.replacement,
+      confidence = "high",
+      source = "observed_pickup",
+      visible = acquisition.visible
+    }
+    choices[#choices + 1] = hold
+  end
+  choices[#choices + 1] = {
+    id = acquisition.id .. ":skip",
+    roomId = acquisition.roomId,
+    position = acquisition.position,
+    kind = "skip",
+    action = "skip",
+    choiceGroupId = acquisition.choiceGroupId,
+    observedIdentity = nil,
+    price = 0,
+    cost = { kind = "free", confidence = "high" },
+    resourceCost = {},
+    availability = "available",
+    eligibleActors = acquisition.eligibleActors,
+    confidence = "high",
+    source = "observed_pickup",
+    visible = acquisition.visible
+  }
+  return choices
 end
 
 function GameAdapter:buildInteractionChoices(roomId, visibility)
@@ -292,19 +385,35 @@ function GameAdapter:buildInteractionChoices(roomId, visibility)
   if not isaac or type(isaac.FindByType) ~= "function" or entityType.ENTITY_SLOT == nil then return {} end
   local result = {}
   local entities = safe({}, function() return isaac.FindByType(entityType.ENTITY_SLOT, -1, -1, false, false) end)
+  local slotVariants = self.env.slotVariant or rawget(_G, "SlotVariant") or {}
+  local slotClasses = {}
+  local function addSlot(name, token)
+    if slotVariants[name] ~= nil then slotClasses[slotVariants[name]] = token end
+  end
+  addSlot("SLOT_MACHINE", "slot_machine")
+  addSlot("SLOT_BLOOD_DONATION_MACHINE", "blood_donation")
+  addSlot("SLOT_FORTUNE_TELLING_MACHINE", "fortune_teller")
+  addSlot("SLOT_DONATION_MACHINE", "donation")
+  addSlot("SLOT_DEVIL_BEGGAR", "devil_beggar")
+  addSlot("SLOT_BEGGAR", "beggar")
+  addSlot("SLOT_KEY_MASTER", "key_master")
+  addSlot("SLOT_BOMB_BUM", "bomb_bum")
   for _, entity in ipairs(values(entities)) do
     local position = entity.Position or {}
+    local slotClass = slotClasses[entity.Variant] or "unknown"
     result[#result + 1] = {
       id = tostring(roomId) .. ":slot:" .. tostring(entity.InitSeed or entity.Index or entity.SubType or #result),
       roomId = roomId,
       position = { x = position.X or 0, y = position.Y or 0 },
       kind = "machine",
       choiceGroupId = tostring(roomId) .. ":slot",
-      observedIdentity = { variant = entity.Variant, subtype = entity.SubType },
+      observedIdentity = { variant = entity.Variant, subtype = entity.SubType, slotClass = slotClass },
       price = tonumber(entity.Price) or 0,
       resourceCost = { coins = math.max(0, tonumber(entity.Price) or 0) },
+      cost = { kind = (tonumber(entity.Price) or 0) > 0 and "coins" or "unknown", confidence = slotClass == "unknown" and "low" or "medium" },
+      availability = "unsupported",
       eligibleActors = { "primary" },
-      confidence = "medium",
+      confidence = slotClass == "unknown" and "low" or "medium",
       source = "observed_slot",
       visible = not (visibility and visibility.curseBlind)
     }
@@ -312,14 +421,32 @@ function GameAdapter:buildInteractionChoices(roomId, visibility)
   return result
 end
 
-function GameAdapter:buildRerollChoice(player, roomId)
+function GameAdapter:buildRerollChoice(player, roomId, roomChoices)
   local rerollActives = self.env.rerollActives or { [105] = true, [166] = true, [374] = true, [477] = true }
+  local targets = {}
+  for _, choice in ipairs(roomChoices or {}) do
+    if choice.roomId == roomId and choice.observedIdentity and choice.observedIdentity.id
+      and (choice.kind == "collectible" or choice.kind == "trinket")
+      and choice.action ~= "skip" and choice.action ~= "hold" then
+      targets[#targets + 1] = choice.id
+    end
+  end
+  if #targets == 0 then return nil end
   for _, active in ipairs((player and player.actives) or {}) do
-    if rerollActives[active.id] and (active.charge or 0) > 0 then
+    local supported = rerollActives[active.id]
+    local item = self.env.itemConfig and safe(nil, function() return self.env.itemConfig:GetCollectible(active.id) end)
+    local required = tonumber(active.requiredCharge or active.maxCharge or (item and (item.MaxCharges or item.MaxCharge)) or (type(supported) == "number" and supported) or nil)
+    local totalCharge = (tonumber(active.charge) or 0) + (tonumber(active.batteryCharge) or 0)
+    if supported and required and required > 0 and totalCharge >= required then
+      local comparisonSupported = self.env.rerollComparisonSupported == true
       return {
         id = tostring(roomId) .. ":reroll:" .. tostring(active.id), roomId = roomId, position = { x = 0, y = 0 }, kind = "reroll", action = "reroll",
         choiceGroupId = tostring(roomId) .. ":reroll", observedIdentity = { id = active.id }, price = 0,
-        resourceCost = { activeCharge = 1 }, eligibleActors = { "primary" }, confidence = "medium", source = "owned_active"
+        resourceCost = { activeCharge = required }, eligibleActors = { "primary" },
+        availability = comparisonSupported and "available" or "insufficient_information",
+        confidence = comparisonSupported and "medium" or "low",
+        source = "owned_active",
+        targetIds = targets
       }
     end
   end
@@ -463,7 +590,8 @@ function GameAdapter:build()
     local pickupVariant = self.env.pickupVariant or rawget(_G, "PickupVariant") or {}
     for _, pickup in ipairs(values(safe({}, function() return isaac.FindByType(entityType.ENTITY_PICKUP, -1, -1, false, false) end))) do
       local roomId = pickup.RoomIndex or safe(nil, function() return pickup:GetRoomIndex() end) or currentIndex
-      local choice = self:buildVisibleChoice(pickup, roomId, visibility)
+      local choices = self:buildVisibleChoiceAlternatives(pickup, roomId, visibility)
+      local choice = choices[1]
       local entry = {
         variant = pickup.Variant,
         subtype = pickup.SubType,
@@ -478,9 +606,11 @@ function GameAdapter:build()
       pickups[#pickups + 1] = entry
       pickupsByRoom[roomId] = pickupsByRoom[roomId] or {}
       pickupsByRoom[roomId][#pickupsByRoom[roomId] + 1] = entry
-      visibleChoices[#visibleChoices + 1] = choice
       choicesByRoom[roomId] = choicesByRoom[roomId] or {}
-      choicesByRoom[roomId][#choicesByRoom[roomId] + 1] = choice
+      for _, visibleChoice in ipairs(choices) do
+        visibleChoices[#visibleChoices + 1] = visibleChoice
+        choicesByRoom[roomId][#choicesByRoom[roomId] + 1] = visibleChoice
+      end
     end
     local interactions = self:buildInteractionChoices(currentIndex, visibility)
     for _, choice in ipairs(interactions) do
@@ -488,7 +618,7 @@ function GameAdapter:build()
       choicesByRoom[currentIndex] = choicesByRoom[currentIndex] or {}
       choicesByRoom[currentIndex][#choicesByRoom[currentIndex] + 1] = choice
     end
-    local reroll = self:buildRerollChoice(players[1], currentIndex)
+    local reroll = self:buildRerollChoice(players[1], currentIndex, choicesByRoom[currentIndex] or {})
     if reroll then
       visibleChoices[#visibleChoices + 1] = reroll
       choicesByRoom[currentIndex] = choicesByRoom[currentIndex] or {}
