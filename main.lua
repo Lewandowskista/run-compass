@@ -12,8 +12,9 @@ local Events = require("runcompass.events")
 local MCM = require("runcompass.mcm")
 local UI = require("runcompass.ui")
 local Runtime = require("runcompass.runtime")
-local ItemModels = require("runcompass.item_models")
-local GuideData = require("runcompass.guide_data")
+local VanillaModels = require("runcompass.vanilla_models")
+local InteractionRules = require("runcompass.interaction_rules")
+local CharacterProfiles = require("runcompass.character_profiles")
 local GuideAPI = require("runcompass.guide_api")
 local EID = require("runcompass.eid")
 
@@ -105,7 +106,11 @@ local function initialize()
     entityType = rawget(_G, "EntityType"),
     levelCurse = rawget(_G, "LevelCurse"),
     collectibleType = rawget(_G, "CollectibleType"),
-    pickupVariant = rawget(_G, "PickupVariant"), itemConfig = itemConfig, capabilities = capabilities,
+    pickupVariant = rawget(_G, "PickupVariant"),
+    pickupPrice = rawget(_G, "PickupPrice"),
+    slotVariant = rawget(_G, "SlotVariant"),
+    activeItemType = (rawget(_G, "ItemType") or {}).ITEM_ACTIVE,
+    itemConfig = itemConfig, capabilities = capabilities,
     itemPool = game.GetItemPool and game:GetItemPool() or nil
   })
   local itemEntries = itemConfig and adapter:collectItems(itemConfig) or {}
@@ -116,10 +121,11 @@ local function initialize()
   for _, entry in ipairs(adapter:collectConfigured("card", cardType.NUM_CARDS or 500)) do modelEntries[#modelEntries + 1] = entry end
   for _, entry in ipairs(adapter:collectConfigured("pill", pillColor.NUM_PILLS or 20)) do modelEntries[#modelEntries + 1] = entry end
   catalog = Catalog.new(itemEntries, Rules.unlocks, Rules)
-  decisionModels = ItemModels.fromCatalog(modelEntries, GuideData.items)
+  decisionModels = VanillaModels.fromCatalog(modelEntries)
+  decisionModels.interactionRules = InteractionRules
   eid = EID.detect(rawget(_G, "EID"))
   RunCompassAPI = GuideAPI.new(decisionModels)
-  for characterToken, profile in pairs(GuideData.characterProfiles) do RunCompassAPI:RegisterCharacterProfile("run-compass", characterToken, profile) end
+  for characterToken, profile in pairs(CharacterProfiles.all()) do RunCompassAPI:RegisterCharacterProfile("run-compass", characterToken, profile) end
   rawset(_G, "RunCompassAPI", RunCompassAPI)
   for _, boss in ipairs(Goals.bosses()) do catalog:add(boss) end
   if not state.selectedGoalId then state.selectedGoalId = "boss.delirium" end
@@ -155,7 +161,8 @@ local function initialize()
     ui = ui
   })
   local modelReport = decisionModels:validate((function() local ids = {}; for _, entry in ipairs(modelEntries) do ids[#ids + 1] = { id = entry.id, kind = entry.kind or "collectible" } end; return ids end)())
-  output("Loaded base tier" .. (capabilities.tier == "enhanced" and " with Repentogon " .. tostring(capabilities.repentogonVersion) or ".") .. " build models=" .. tostring(modelReport.modeled) .. "/" .. tostring(modelReport.total) .. ", EID=" .. (eid.available and "available" or "missing"))
+  local rulesReport = InteractionRules.diagnostics()
+  output("Loaded base tier" .. (capabilities.tier == "enhanced" and " with Repentogon " .. tostring(capabilities.repentogonVersion) or ".") .. " build models=" .. tostring(modelReport.modeled) .. "/" .. tostring(modelReport.total) .. ", modelVersion=" .. tostring(VanillaModels.version) .. ", interactionRules=" .. tostring(rulesReport.total) .. ", EID=" .. (eid.available and "available" or "missing"))
 end
 
 local normalized = Events.normalized(controller)

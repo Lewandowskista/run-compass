@@ -16,7 +16,7 @@ function GuideAPI:RegisterInteractionRule(modId, rule)
   if type(modId) ~= "string" or type(rule) ~= "table" or rule.candidate == nil then return false end
   rule.source = modId
   self.rules[#self.rules + 1] = rule
-  local model = self.models:get(rule.candidate) or { effects = {} }
+  local model = self.models:get(rule.candidate, rule.candidateKind) or { kind = rule.candidateKind, effects = {} }
   model.synergies = model.synergies or {}
   if rule.owned then model.synergies[#model.synergies + 1] = { owned = rule.owned, effects = rule.effects or {}, id = rule.id or (modId .. ":interaction:" .. tostring(rule.candidate)) } end
   self.models:register(rule.candidate, model)

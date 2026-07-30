@@ -12,6 +12,11 @@ local function addEffects(target, effects)
   for key, value in pairs(effects or {}) do target[key] = (target[key] or 0) + (tonumber(value) or 0) end
 end
 
+local function keyFor(id, kind)
+  if kind and kind ~= "collectible" then return tostring(kind) .. ":" .. tostring(id) end
+  return tonumber(id) or id
+end
+
 function ItemModels.new(models, metadata)
   local self = setmetatable({ models = {}, metadata = metadata or {}, diagnostics = {}, characterProfiles = {} }, ItemModels)
   for id, model in pairs(models or {}) do self.models[tonumber(id) or id] = clone(model) end
@@ -39,20 +44,20 @@ function ItemModels.fromCatalog(items, curated, profiles)
       model.status = "curated"
     end
     if profiles[item.id] then model.characterModifiers = clone(profiles[item.id]) end
-    local key = (item.kind and item.kind ~= "collectible") and (tostring(item.kind) .. ":" .. tostring(item.id)) or item.id
-    models[key] = model
+    models[keyFor(item.id, item.kind)] = model
   end
   return ItemModels.new(models, { source = "ItemConfig + curated-v1.1" })
 end
 
 function ItemModels:register(id, model)
   if id == nil or type(model) ~= "table" then return false, "invalid_model" end
-  self.models[tonumber(id) or id] = clone(model)
+  local copy = clone(model)
+  self.models[keyFor(id, copy.kind)] = copy
   return true
 end
 
 function ItemModels:get(id, kind)
-  local keyed = kind and self.models[tostring(kind) .. ":" .. tostring(id)]
+  local keyed = kind and self.models[keyFor(id, kind)]
   return keyed or self.models[id] or self.models[tonumber(id)]
 end
 

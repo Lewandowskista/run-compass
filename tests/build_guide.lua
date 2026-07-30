@@ -417,9 +417,12 @@ end
 local function testCompatibilityAPIRegistersModelsAndRules()
   local api = GuideAPI.new(ItemModels.new())
   assertTrue(api:RegisterItemModel("test", "collectible", 901, { effects = { offense = 5 } }), "compatibility item model should register")
+  assertTrue(api:RegisterItemModel("test", "trinket", 901, { effects = { economy = 7 } }), "compatibility trinket model should register without overwriting collectible")
   assertTrue(api:RegisterInteractionRule("test", { candidate = 901, owned = 902, effects = { bossDamage = 3 } }), "compatibility interaction should register")
   assertTrue(api:RegisterCharacterProfile("test", "test_character", { effects = { defense = 2 } }), "compatibility character should register")
-  assertEqual(api.models:get(901).effects.offense, 5, "registered model should be queryable")
+  assertEqual(api.models:get(901, "collectible").effects.offense, 5, "registered collectible model should be queryable by kind")
+  assertEqual(api.models:get(901, "trinket").effects.economy, 7, "registered trinket model should not collide with collectible id")
+  assertEqual(api.models:evaluate(901, { collectibles = { [902] = 1 }, characterToken = "isaac" }, {}, "collectible").effects.bossDamage, 3, "registered interaction rules should affect evaluation immediately")
 end
 
 local function testPlannerReturnsVisibleDecisionAlongsideRoute()
