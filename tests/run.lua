@@ -121,7 +121,7 @@ end
 
 local function testSaveMigrationUsesSafeDefaults()
   local migrated = Save.migrate({ schemaVersion = 0, selectedGoalId = "boss.delirium" })
-  assertEqual(migrated.schemaVersion, 4, "save data should be migrated")
+  assertEqual(migrated.schemaVersion, 5, "save data should be migrated")
   assertEqual(migrated.pinned, false, "missing fields should use safe defaults")
 end
 
@@ -134,7 +134,7 @@ end
 
 local function testSaveV4AddsBrowserCategoryAndDetailBindings()
   local migrated = Save.migrate({ schemaVersion = 3, browser = { status = "locked" }, bindings = { keyboardGoal = 117 } })
-  assertEqual(migrated.schemaVersion, 4, "guidance UI requires schema v4")
+  assertEqual(migrated.schemaVersion, 5, "trustworthy foundation requires schema v5")
   assertEqual(migrated.browser.category, "boss_routes", "migration should add the default category")
   assertEqual(migrated.bindings.keyboardDetail, 297, "migration should add a detail key")
   assertEqual(migrated.bindings.controllerDetail, 11, "migration should add a detail controller button")
@@ -654,6 +654,12 @@ local function testSearchFindsShortestRevealedPath()
   assertEqual(#result.nodes, 3, "shortest path should use two revealed doors")
 end
 
+local function testSaveMigratesSubOneHudScaleToTruthfulMinimum()
+  local migrated = Save.migrate({ schemaVersion = 4, hud = { scale = 0.5 } })
+  assertEqual(migrated.schemaVersion, 5, "scale migration should move saves to schema v5")
+  assertEqual(migrated.hud.scale, 1, "bitmap HUD scale below one should migrate to the truthful minimum")
+end
+
 local function testSearchRanksPathsByTraversedEdgeCost()
   local snapshot = {
     currentRoom = 1,
@@ -1087,6 +1093,7 @@ local tests = {
   testBeastMilestoneExposesPhotoAndAscentRequirements,
   testMilestonesRejectWrongPhotoAndConsumedKnife,
   testSaveClampsUnsafeValues,
+  testSaveMigratesSubOneHudScaleToTruthfulMinimum,
   testCatalogValidationReportsClassifiedTotals,
   testSearchFindsShortestRevealedPath,
   testSearchRanksPathsByTraversedEdgeCost,

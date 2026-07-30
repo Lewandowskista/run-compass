@@ -147,6 +147,29 @@ local function testGameAdapterCapturesOwnedItemsAndActives()
   assertEqual(normalized.pills[1].effect, "speed_up", "identified pill effect should be retained")
 end
 
+local function testGameAdapterCachesCollectibleScansBetweenFallbackFrames()
+  local scans = 0
+  local player = {
+    GetPlayerType = function() return 1 end,
+    GetCollectibleNum = function(_, id) scans = scans + 1; return id == 2 and 1 or 0 end
+  }
+  local adapter = GameAdapter.new({ playerType = { PLAYER_ISAAC = 1 }, collectibleType = { NUM_COLLECTIBLES = 5 } })
+  adapter.currentFrameId = 1
+  local first = adapter:buildPlayer(player)
+  adapter.currentFrameId = 2
+  local second = adapter:buildPlayer(player)
+  assertEqual(first.collectibles[2], 1, "initial collectible scan should populate inventory")
+  assertEqual(second.collectibles[2], 1, "cached collectible inventory should be reused before fallback")
+  assertEqual(scans, 4, "full collectible scan should not repeat before the 30-frame fallback")
+  adapter.currentFrameId = 31
+  adapter:buildPlayer(player)
+  assertEqual(scans, 8, "full collectible scan should refresh on the 30-frame fallback")
+  adapter:invalidateInventory()
+  adapter.currentFrameId = 32
+  adapter:buildPlayer(player)
+  assertEqual(scans, 12, "explicit inventory invalidation should force a fresh scan")
+end
+
 local function healthPlayer(playerType, red, soul, blackMask, boneContainers, maxRed)
   return {
     GetPlayerType = function() return playerType end,
@@ -459,12 +482,12 @@ end
 
 local function testSaveV3MigratesDecisionSettingsSafely()
   local saved = Save.migrate({ schemaVersion = 2, decision = { detailLevel = 99, autoCompare = false }, browser = { alphabet = "Z" } })
-  assertEqual(saved.schemaVersion, 4, "build-guide settings should migrate to the current schema")
+  assertEqual(saved.schemaVersion, 5, "build-guide settings should migrate to the current schema")
   assertEqual(saved.decision.detailLevel, 3, "decision detail should be clamped")
   assertEqual(saved.decision.autoCompare, false, "decision setting should migrate")
   assertEqual(saved.browser.alphabet, "Z", "browser preferences should migrate")
 end
 
-local tests = { testBuildStateNormalizesOwnedInventory, testFeatureModelAppliesOwnedSynergy, testFeatureSummaryAggregatesOwnedBuild, testTagSynergyUsesIndexedBuildFeatures, testChoiceEngineRanksTakeOverSkipWhenGoalRelevant, testChoiceEngineRejectsUnaffordablePurchase, testChoiceEnginePreservesRouteReserveWhenRankingPurchases, testChoiceEngineTreatsUnknownCostAsInsufficientInformation, testChoiceEngineUsesLexicographicSafetyBeforeBuildGain, testChoiceEngineExplainsChargedActiveReplacementLoss, testCatalogBuildsBaselineModelsForEveryLiveItem, testCharacterModifierAndUnknownFallbackAreExplicit, testTransformationThresholdProducesReasonCode, testCharacterRestrictionProducesWarningInsteadOfFalseSynergy, testGameAdapterCapturesOwnedItemsAndActives, testGameAdapterDoesNotCountBlackHeartBitmaskAsHealth, testGameAdapterNormalizesConservativeHealthModes, testGameAdapterNormalizesGoldenAndSmeltedTrinkets, testGameAdapterTreatsJacobAndEsauTwinAsSolo, testGameAdapterStillDetectsTrueCoop, testVisibleChoiceNormalizesObservedPickupAndPrice, testVisibleActiveChoiceExposesReplacementConsequence, testVisibleChoiceMapsPickupPriceConstantsToResourceCosts, testUnknownPickupPriceMakesAcquisitionInsufficientInformation, testVisibleChoiceAlternativesIncludeHoldForActiveReplacement, testSafeAlternativesDoNotInheritCandidateItemValue, testVisiblePillIdentityRequiresIdentificationProbe, testAdapterCatalogsTrinketsCardsAndPills, testAdapterCapturesVisibleMachineInteractions, testAdapterDescribesUnknownMachineVariantsConservatively, testAdapterExposesAvailableRerollDecision, testAdapterSuppressesRerollWithoutFullChargeOrTarget, testChoiceEngineDoesNotGuessBlindItemIdentity, testCompatibilityAPIRegistersModelsAndRules, testPlannerReturnsVisibleDecisionAlongsideRoute, testEIDIsOptionalDescriptionOnly, testSaveV3MigratesDecisionSettingsSafely }
+local tests = { testBuildStateNormalizesOwnedInventory, testFeatureModelAppliesOwnedSynergy, testFeatureSummaryAggregatesOwnedBuild, testTagSynergyUsesIndexedBuildFeatures, testChoiceEngineRanksTakeOverSkipWhenGoalRelevant, testChoiceEngineRejectsUnaffordablePurchase, testChoiceEnginePreservesRouteReserveWhenRankingPurchases, testChoiceEngineTreatsUnknownCostAsInsufficientInformation, testChoiceEngineUsesLexicographicSafetyBeforeBuildGain, testChoiceEngineExplainsChargedActiveReplacementLoss, testCatalogBuildsBaselineModelsForEveryLiveItem, testCharacterModifierAndUnknownFallbackAreExplicit, testTransformationThresholdProducesReasonCode, testCharacterRestrictionProducesWarningInsteadOfFalseSynergy, testGameAdapterCapturesOwnedItemsAndActives, testGameAdapterCachesCollectibleScansBetweenFallbackFrames, testGameAdapterDoesNotCountBlackHeartBitmaskAsHealth, testGameAdapterNormalizesConservativeHealthModes, testGameAdapterNormalizesGoldenAndSmeltedTrinkets, testGameAdapterTreatsJacobAndEsauTwinAsSolo, testGameAdapterStillDetectsTrueCoop, testVisibleChoiceNormalizesObservedPickupAndPrice, testVisibleActiveChoiceExposesReplacementConsequence, testVisibleChoiceMapsPickupPriceConstantsToResourceCosts, testUnknownPickupPriceMakesAcquisitionInsufficientInformation, testVisibleChoiceAlternativesIncludeHoldForActiveReplacement, testSafeAlternativesDoNotInheritCandidateItemValue, testVisiblePillIdentityRequiresIdentificationProbe, testAdapterCatalogsTrinketsCardsAndPills, testAdapterCapturesVisibleMachineInteractions, testAdapterDescribesUnknownMachineVariantsConservatively, testAdapterExposesAvailableRerollDecision, testAdapterSuppressesRerollWithoutFullChargeOrTarget, testChoiceEngineDoesNotGuessBlindItemIdentity, testCompatibilityAPIRegistersModelsAndRules, testPlannerReturnsVisibleDecisionAlongsideRoute, testEIDIsOptionalDescriptionOnly, testSaveV3MigratesDecisionSettingsSafely }
 for index, test in ipairs(tests) do test(); print("build ok " .. index) end
 print(#tests .. " build-guide tests passed")

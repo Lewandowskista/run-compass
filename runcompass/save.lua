@@ -1,5 +1,5 @@
 local Save = {}
-local CURRENT_SCHEMA = 4
+local CURRENT_SCHEMA = 5
 
 local function defaults()
   return {
@@ -36,7 +36,7 @@ function Save.migrate(data)
   result.schemaVersion = CURRENT_SCHEMA
   local defaultHud, defaultBindings = defaults().hud, defaults().bindings
   result.hud = result.hud or {}
-  result.hud.scale = math.max(0.5, math.min(2, tonumber(result.hud.scale) or defaultHud.scale))
+  result.hud.scale = math.max(1, math.min(2, tonumber(result.hud.scale) or defaultHud.scale))
   result.hud.x = math.max(-400, math.min(400, tonumber(result.hud.x) or defaultHud.x))
   result.hud.y = math.max(-240, math.min(240, tonumber(result.hud.y) or defaultHud.y))
   result.hud.visible = result.hud.visible ~= false

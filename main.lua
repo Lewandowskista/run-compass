@@ -167,6 +167,11 @@ end
 
 local normalized = Events.normalized(controller)
 
+local function invalidateInventory()
+  if adapter and adapter.invalidateInventory then adapter:invalidateInventory() end
+  normalized.player()
+end
+
 addCallback("MC_POST_GAME_STARTED", function()
   if isaac.LoadModData then state = Save.deserialize(isaac.LoadModData(RunCompass)) end
   initialize()
@@ -193,9 +198,10 @@ addCallback("MC_EXECUTE_CMD", function(command, params)
   else output("Usage: runcompass status | runcompass catalog | runcompass <goal-id>") end
 end)
 
-addCallback("MC_POST_COMPLETION_MARK_GET", normalized.progress)
+addCallback("MC_COMPLETION_MARK_GET", normalized.progress)
+addCallback("MC_POST_COMPLETION_EVENT", normalized.progress)
 addCallback("MC_POST_ACHIEVEMENT_UNLOCK", normalized.progress)
-addCallback("MC_POST_PLAYER_COLLECTIBLE_ADDED", normalized.player)
-addCallback("MC_POST_PLAYER_COLLECTIBLE_REMOVED", normalized.player)
-addCallback("MC_POST_TRIGGER_COLLECTIBLE_ADDED", normalized.build)
+addCallback("MC_POST_PLAYER_COLLECTIBLE_ADDED", invalidateInventory)
+addCallback("MC_POST_PLAYER_COLLECTIBLE_REMOVED", invalidateInventory)
+addCallback("MC_POST_TRIGGER_COLLECTIBLE_ADDED", invalidateInventory)
 addCallback("MC_POST_ENTITY_REMOVE", normalized.entityRemoved)

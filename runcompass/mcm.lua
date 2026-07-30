@@ -18,7 +18,7 @@ function MCM.register(state, onChanged)
       OnChange = function(value) change(value); if onChanged then onChanged() end end,
       Info = info or {}
     }
-    if kind == "NUMBER" then config.Minimum = minimum or 0.5; config.Maximum = maximum or 2; config.ModifyBy = modifyBy or 0.1 end
+    if kind == "NUMBER" then config.Minimum = minimum or 1; config.Maximum = maximum or 2; config.ModifyBy = modifyBy or 0.1 end
     if kind == "KEYBIND_KEYBOARD" or kind == "KEYBIND_CONTROLLER" then
       local isController = kind == "KEYBIND_CONTROLLER"
       config.PopupGfx = menu.PopupGfx and menu.PopupGfx.WIDE_SMALL or nil

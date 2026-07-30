@@ -23,7 +23,7 @@ After a room is clear, the HUD shows a compact card: the target's readable name,
 
 A door arrow points to the next legitimately revealed door using its live in-room position, and a marker (`TAKE`, `CAUTION`, `SKIP`, or `REROLL`) appears over the visible pedestal, shop item, or interactable the recommendation is evaluating.
 
-Available settings include scale (`0.5–2`), X/Y offsets, automatic comparisons, detail level (`1–3`), confidence and warning text, developer diagnostics, and optional EID descriptions. EID text remains descriptive-only; when an item's identity is hidden (Curse of the Blind), Run Compass shows no advice and EID shows no text for it.
+Available settings include scale (`1–2`), X/Y offsets, automatic comparisons, detail level (`1–3`), confidence and warning text, developer diagnostics, and optional EID descriptions. EID text remains descriptive-only; when an item's identity is hidden (Curse of the Blind), Run Compass shows no advice and EID shows no text for it.
 
 ## Console
 

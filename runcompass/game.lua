@@ -49,7 +49,11 @@ local function constantMatches(constants, price, names)
 end
 
 function GameAdapter.new(env)
-  return setmetatable({ env = env, observationRooms = {}, observationChoices = {}, floorToken = nil }, GameAdapter)
+  return setmetatable({ env = env, observationRooms = {}, observationChoices = {}, floorToken = nil, collectibleCache = {}, inventoryGeneration = 0 }, GameAdapter)
+end
+
+function GameAdapter:invalidateInventory()
+  self.inventoryGeneration = (self.inventoryGeneration or 0) + 1
 end
 
 function GameAdapter:roomKind(dataType, variant, currentRoom)
@@ -183,10 +187,24 @@ function GameAdapter:buildPlayer(player)
     return ok and value ~= nil and value or default
   end
   local playerType = invoke(nil, "GetPlayerType")
-  local collectibles, collectibleType = {}, self.env.collectibleType or rawget(_G, "CollectibleType") or {}
-  for id = 1, (collectibleType.NUM_COLLECTIBLES or 733) - 1 do
-    local count = invoke(0, "GetCollectibleNum", id, true)
-    if count and count > 0 then collectibles[id] = count end
+  local collectibleType = self.env.collectibleType or rawget(_G, "CollectibleType") or {}
+  local playerCacheKey = tostring(player)
+  local frameId = tonumber(self.currentFrameId)
+  local cache = self.collectibleCache[playerCacheKey]
+  local shouldScan = cache == nil
+    or cache.generation ~= (self.inventoryGeneration or 0)
+    or frameId == nil
+    or cache.frameId == nil
+    or frameId - cache.frameId >= 30
+  local collectibles = {}
+  if shouldScan then
+    for id = 1, (collectibleType.NUM_COLLECTIBLES or 733) - 1 do
+      local count = invoke(0, "GetCollectibleNum", id, true)
+      if count and count > 0 then collectibles[id] = count end
+    end
+    self.collectibleCache[playerCacheKey] = { frameId = frameId, generation = self.inventoryGeneration or 0, collectibles = cloneTable(collectibles) }
+  else
+    collectibles = cloneTable(cache.collectibles or {})
   end
   local actives, trinkets, cards, pills = {}, {}, {}, {}
   for slot = 0, 3 do
@@ -553,6 +571,8 @@ function GameAdapter:build()
     curseBlind = levelCurse.CURSE_OF_BLIND and (curses & levelCurse.CURSE_OF_BLIND) ~= 0 or false,
     curseLost = levelCurse.CURSE_OF_THE_LOST and (curses & levelCurse.CURSE_OF_THE_LOST) ~= 0 or false
   }
+  local frameId = safe(0, function() return game:GetFrameCount() end)
+  self.currentFrameId = frameId
   local players = {}
   local independentPlayers = 0
   local count = safe(1, function() return game:GetNumPlayers() end)
@@ -570,7 +590,6 @@ function GameAdapter:build()
   local seeds = safe(nil, function() return game:GetSeeds() end)
   if seeds and seeds.IsCustomRun and safe(false, function() return seeds:IsCustomRun() end) then mode.progressionAllowed = false end
   if game.AchievementUnlocksDisallowed and safe(false, function() return game:AchievementUnlocksDisallowed() end) then mode.progressionAllowed = false end
-  local frameId = safe(0, function() return game:GetFrameCount() end)
   local stage = safe(nil, function() return level:GetStage() end)
   local stageType = safe(nil, function() return level:GetStageType() end)
   local victoryLap = safe(0, function() return game:GetVictoryLap() end)

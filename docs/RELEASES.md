@@ -1,5 +1,13 @@
 # Testing, packaging, and releases
 
+## 1.3.0 — Trustworthy Foundation
+
+- Normalizes observed health, door costs, visible-choice costs, and option alternatives conservatively.
+- Keeps unknown prices, hidden identities, unsupported machines, and unsupported reroll comparisons as insufficient information.
+- Wires versioned vanilla model/profile/rule data and kind-aware compatibility registration.
+- Moves save data to schema v5 and clamps HUD scale to the truthful bitmap range (`1–2`).
+- Corrects progress callback names for current Repentogon callback tables.
+
 ## 1.2.0 — Actionable Guidance UI
 
 - Replaces the flat goal list with a three-pane, controller-friendly browser.
