@@ -88,7 +88,9 @@ end
 
 function Save.deserialize(encoded)
   if type(encoded) ~= "string" or encoded == "" then return defaults() end
-  local chunk = load(encoded, "runcompass-save", "t", {})
+  local compiler = type(load) == "function" and load or nil
+  if not compiler then return defaults() end
+  local chunk = compiler(encoded, "runcompass-save", "t", {})
   if not chunk then return defaults() end
   local ok, value = pcall(chunk)
   if not ok then return defaults() end

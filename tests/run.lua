@@ -770,6 +770,17 @@ local function testSaveMigratesSubOneHudScaleToTruthfulMinimum()
   assertEqual(migrated.hud.scale, 1, "bitmap HUD scale below one should migrate to the truthful minimum")
 end
 
+local function testSaveDeserializeDoesNotRequireRuntimeLoad()
+  local originalLoad = _G.load
+  _G.load = nil
+  local ok, result = pcall(function()
+    return Save.deserialize(Save.serialize({ pinned = true }))
+  end)
+  _G.load = originalLoad
+  assertTrue(ok, "save deserialization must not crash when Isaac removes global load")
+  assertEqual(result.schemaVersion, 5, "restricted runtimes should still receive migrated defaults")
+end
+
 local function testSearchRanksPathsByTraversedEdgeCost()
   local snapshot = {
     currentRoom = 1,
@@ -1212,6 +1223,7 @@ local tests = {
   testMilestonesRejectWrongPhotoAndConsumedKnife,
   testSaveClampsUnsafeValues,
   testSaveMigratesSubOneHudScaleToTruthfulMinimum,
+  testSaveDeserializeDoesNotRequireRuntimeLoad,
   testCatalogValidationReportsClassifiedTotals,
   testSearchFindsShortestRevealedPath,
   testSearchRanksPathsByTraversedEdgeCost,
