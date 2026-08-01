@@ -13,6 +13,20 @@ local function visible(room, visibility)
   return room and not room.hidden and not room.secret and not (visibility.curseLost and not room.visited)
 end
 
+local function hasVisiblePickupValue(room, visibility)
+  if not room or not room.pickups or visibility and visibility.curseBlind then return false end
+  for _, pickup in ipairs(room.pickups) do
+    if pickup.visible ~= false then return true end
+  end
+  return false
+end
+
+local function specialRoomStillValuable(room, visibility)
+  if not room then return false end
+  if room.kind ~= "treasure" and room.kind ~= "shop" then return false end
+  return not room.visited or hasVisiblePickupValue(room, visibility)
+end
+
 -- Deterministic multi-label traversal of revealed rooms. Each room retains
 -- every nondominated scalar-distance/resource-cost state, with independent
 -- edge and valuation histories. Parent links keep rejected labels cheap;
@@ -68,7 +82,7 @@ end
 local function candidateRoom(node, map, snapshot)
   local room = map[node.roomId]
   if node.active == false or not room or node.roomId == snapshot.currentRoom or node.pathLength <= 1 then return nil end
-  if room.visited and room.kind ~= "treasure" and room.kind ~= "shop" then return nil end
+  if room.visited and not specialRoomStillValuable(room, snapshot.visibility or {}) then return nil end
   return room
 end
 
@@ -90,8 +104,8 @@ local function candidateForState(node, room, snapshot, goal)
     evaluation = evaluation,
     reasonCodes = {
       ranked_frontier = true,
-      treasure_detour = room.kind == "treasure",
-      shop_detour = room.kind == "shop"
+      treasure_detour = room.kind == "treasure" and specialRoomStillValuable(room, snapshot.visibility or {}),
+      shop_detour = room.kind == "shop" and specialRoomStillValuable(room, snapshot.visibility or {})
     }
   }
 end

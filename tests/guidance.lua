@@ -122,6 +122,38 @@ local function testCompactCardUsesStrongestReasonAndWarning()
   assertEqual(#view.warnings, 1, "compact card should preserve the strongest warning")
 end
 
+local function testHudRendersReadableDataUpdateWarning()
+  local view = Hud.view({
+    status = "ok",
+    steps = { "Explore" },
+    decision = {
+      primary = {
+        action = "take",
+        reasonCodes = {},
+        warnings = { "data_update_required" },
+        confidence = "low"
+      }
+    }
+  }, "Delirium", false, { showConfidence = false })
+  local text = table.concat(view.lines, "\n")
+  assertTrue(string.find(text, "limited item data", 1, true) ~= nil, "HUD should explain low-confidence baseline data in player language")
+  assertTrue(string.find(text, "data_update_required", 1, true) == nil, "HUD should not render internal diagnostic warning codes")
+end
+
+local function testVisitedEmptyTreasureRoomIsNotLabeledAsDetour()
+  local value = snapshot()
+  value.rooms = {
+    { id = 1, kind = "normal", visited = true, clear = true, doors = { { slot = 0, to = 3 }, { slot = 2, to = 4 } }, pickups = {} },
+    { id = 3, kind = "treasure", visited = true, clear = true, doors = { { slot = 2, to = 1 } }, pickups = {} },
+    { id = 4, kind = "normal", visited = false, clear = false, doors = { { slot = 0, to = 1 } }, pickups = {} }
+  }
+  local result = Planner.plan(value, { id = "boss.delirium", destinationRooms = {}, frontier = true })
+  assertEqual(result.status, "explore", "visited empty treasure room may still be a revealed frontier")
+  assertEqual(result.nextDoorSlot, 2, "planner should choose the real unexplored frontier instead of the consumed treasure room")
+  assertEqual(result.steps[1], "Explore the best revealed frontier", "consumed treasure room should not remain labeled as a treasure detour")
+  assertTrue(not result.reasonCodes.treasure_detour, "consumed treasure room should not expose the treasure-detour reason")
+end
+
 local function testCompactCardShowsConfidenceOnlyWhenEnabled()
   local recommendation = {
     status = "ok",
@@ -163,8 +195,8 @@ local function testCompactCardShowsWarningTextOnlyWhenEnabled()
   local shown = Hud.view(recommendation, "Mega Satan", true, { showWarnings = true })
   local hidden = Hud.view(recommendation, "Mega Satan", true, { showWarnings = false })
   local function joined(view) return table.concat(view.lines, "\n") end
-  assertTrue(string.find(joined(shown), "active_replacement_loss", 1, true) ~= nil, "warning text should render when showWarnings is enabled")
-  assertTrue(string.find(joined(hidden), "active_replacement_loss", 1, true) == nil, "warning text should be omitted when showWarnings is disabled")
+  assertTrue(string.find(joined(shown), "active replacement risk", 1, true) ~= nil, "warning text should render when showWarnings is enabled")
+  assertTrue(string.find(joined(hidden), "active replacement risk", 1, true) == nil, "warning text should be omitted when showWarnings is disabled")
 end
 
 local function testAutoCompareGatesChoiceMarkerAndAction()
@@ -327,6 +359,8 @@ local tests = {
   testExploreHysteresisKeepsValidEquivalentDoor,
   testDoorPositionUsesGameRoom,
   testCompactCardUsesStrongestReasonAndWarning,
+  testHudRendersReadableDataUpdateWarning,
+  testVisitedEmptyTreasureRoomIsNotLabeledAsDetour,
   testCompactCardShowsConfidenceOnlyWhenEnabled,
   testCompactCardShowsWarningTextOnlyWhenEnabled,
   testAutoCompareGatesChoiceMarkerAndAction,

@@ -32,6 +32,23 @@ local MARKER_STATES = {
   insufficient_information = "INSUFFICIENT INFORMATION"
 }
 
+local WARNING_LABELS = {
+  data_update_required = "limited item data",
+  active_replacement_loss = "active replacement risk",
+  charged_active_replaced = "charged active would be replaced",
+  unknown_cost = "unknown cost",
+  unsupported_mechanic = "unsupported mechanic",
+  insufficient_information = "insufficient information",
+  identity_hidden = "identity hidden",
+  insufficient_coins = "not enough coins",
+  insufficient_resource = "not enough resources",
+  route_reserve_required = "route resource reserve required"
+}
+
+local function warningLabel(warning)
+  return WARNING_LABELS[warning] or tostring(warning or "caution"):gsub("_", " ")
+end
+
 function Hud.strongestReason(reasonCodes)
   for _, reason in ipairs(REASON_PRIORITY) do
     if reasonCodes and reasonCodes[reason] then return reason end
@@ -87,7 +104,7 @@ function Hud.view(recommendation, targetName, expanded, settings)
 
   local strongestWarning = primary and primary.warnings and primary.warnings[1] or nil
   if showWarnings and strongestWarning then
-    lines[#lines + 1] = Strings.get("hud.warning", tostring(strongestWarning))
+    lines[#lines + 1] = Strings.get("hud.warning", warningLabel(strongestWarning))
   end
 
   local confidenceValue = primary and primary.confidence or recommendation.confidence

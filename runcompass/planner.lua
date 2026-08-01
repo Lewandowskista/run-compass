@@ -250,8 +250,8 @@ function Planner.plan(snapshot, goal, previous, decisionModels)
   if #destinations == 0 and goal.frontier then
     local candidate = Frontier.best(snapshot, goal)
     if candidate then
-      local step = candidate.roomKind == "treasure" and "Take the treasure-room detour"
-        or candidate.roomKind == "shop" and "Check the worthwhile shop route"
+      local step = candidate.reasonCodes and candidate.reasonCodes.treasure_detour and "Take the treasure-room detour"
+        or candidate.reasonCodes and candidate.reasonCodes.shop_detour and "Check the worthwhile shop route"
         or "Explore the best revealed frontier"
       local recommendation = {
         status = "explore",

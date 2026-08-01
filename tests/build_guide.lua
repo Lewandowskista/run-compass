@@ -320,6 +320,9 @@ local function testVisibleChoiceSuppressesRawLocalizationTokenNames()
   local choice = adapter:buildVisibleChoice({ Variant = 100, SubType = 359, InitSeed = 777, Position = { X = 40, Y = 50 } }, 9, { curseBlind = false })
   assertEqual(choice.observedIdentity.id, 359, "observed identity should retain the real item id")
   assertEqual(choice.observedIdentity.name, nil, "raw localization tokens must not leak into HUD item names")
+  local hashAdapter = GameAdapter.new({ pickupVariant = { PICKUP_COLLECTIBLE = 100 }, itemConfig = { GetCollectible = function() return { Name = "#LIL_LOKI_NAME", Quality = 3, Tags = 8 } end } })
+  local hashChoice = hashAdapter:buildVisibleChoice({ Variant = 100, SubType = 360, InitSeed = 778, Position = { X = 40, Y = 50 } }, 9, { curseBlind = false })
+  assertEqual(hashChoice.observedIdentity.name, nil, "localized hash-prefixed tokens must not leak into HUD item names")
 end
 
 local function testVisibleActiveChoiceExposesReplacementConsequence()

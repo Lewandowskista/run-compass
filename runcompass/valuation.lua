@@ -37,13 +37,15 @@ function Valuation.accumulate(snapshot, room, goalRooms, totals, edgeCost)
   end
   if room.clear == false then totals.risk = totals.risk + (room.kind == "boss" and 2 or 1) end
   if not goalRooms[room.id] then
+    local hasVisiblePickupValue = false
     if room.pickups and room.pickups[1] then
       for _, pickup in ipairs(Visibility.filterPickups(room.pickups, snapshot.visibility or {})) do
+        hasVisiblePickupValue = true
         totals.buildGain = totals.buildGain + (pickup.quality or 0) * 10
       end
     end
-    if room.kind == "treasure" then totals.buildGain = totals.buildGain + 2 end
-    if room.kind == "shop" then totals.buildGain = totals.buildGain + 1 end
+    if room.kind == "treasure" and (not room.visited or hasVisiblePickupValue) then totals.buildGain = totals.buildGain + 2 end
+    if room.kind == "shop" and (not room.visited or hasVisiblePickupValue) then totals.buildGain = totals.buildGain + 1 end
   end
   return totals
 end

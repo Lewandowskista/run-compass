@@ -44,7 +44,7 @@ end
 
 local function readableConfigName(name)
   if type(name) ~= "string" or name == "" then return nil end
-  if name:match("^[A-Z0-9_]+_NAME$") then return nil end
+  if name:match("^#?[A-Z0-9_]+_NAME$") then return nil end
   return name
 end
 
