@@ -20,6 +20,7 @@ local Valuation = require("runcompass.valuation")
 local Frontier = require("runcompass.frontier")
 local MCM = require("runcompass.mcm")
 local UI = require("runcompass.ui")
+local RouteState = require("runcompass.route_state")
 
 local function assertEqual(actual, expected, message)
   if actual ~= expected then
@@ -606,16 +607,125 @@ local function testHushMilestoneDetectsMissedEntranceTimer()
   assertTrue(result.reasonCodes.timer_missed, "missed Hush timer should be explained")
 end
 
+local function testRouteStateIsObservedAndClassifiesSpecialDoors()
+  local snapshot = baseSnapshot()
+  snapshot.floor = { stage = 8, stageType = 1, currentRoomId = 1 }
+  snapshot.run = { elapsedSeconds = 29 * 60 }
+  snapshot.player.inventory = { questItems = { key_piece_1 = true }, photoChoice = "polaroid", routeCards = { fool = true } }
+  snapshot.rooms[1].doors = {
+    { slot = 0, to = 2, kind = "special", cost = { unknown = true }, confidence = "low" },
+    { slot = 1, to = 3, kind = "ordinary", cost = {} }
+  }
+  local state = RouteState.fromSnapshot(snapshot)
+  assertEqual(state.stage, 8, "route state should copy observed stage")
+  assertEqual(state.stageType, 1, "route state should copy observed stage type")
+  assertTrue(state.questPieces.key_piece_1, "route state should copy observed quest pieces")
+  assertEqual(state.photoChoice, "polaroid", "route state should copy observed photo choice")
+  assertTrue(state.routeCards.fool, "route state should copy observed route cards")
+  assertEqual(state.timers.hushDeadline, 30 * 60, "route state should expose the Hush deadline")
+  assertEqual(state.visibleSpecialDoors[1].slot, 0, "route state should expose observed special door slots")
+end
+
+local function testPlannerEmitsTypedEnterDoorAction()
+  local snapshot = baseSnapshot()
+  snapshot.rooms[1].doors = { { slot = 3, to = 3, cost = { keys = 1 } } }
+  snapshot.player.keys = 2
+  local result = Planner.plan(snapshot, { id = "boss.delirium", kind = "boss", destinationRooms = { 3 }, requiredResources = {} })
+  assertEqual(result.status, "ok", "revealed destination should remain routable")
+  assertEqual(result.nextAction.type, "ENTER_DOOR", "routed path should expose a typed enter-door action")
+  assertEqual(result.nextAction.doorSlot, 3, "typed action should retain the exact selected door")
+  assertEqual(result.nextAction.cost.keys, 1, "typed action should expose the traversed edge cost")
+end
+
+local function testPlannerEmitsTypedExploreFrontierAction()
+  local snapshot = baseSnapshot()
+  snapshot.rooms[2].kind = "treasure"
+  snapshot.rooms[2].pickups = { { visible = true, quality = 4 } }
+  local result = Planner.plan(snapshot, { id = "boss.mother", kind = "boss", frontier = true, destinationRooms = {} })
+  assertEqual(result.status, "explore", "frontier routing should remain exploratory")
+  assertEqual(result.nextAction.type, "EXPLORE_FRONTIER", "frontier fallback should be typed explicitly")
+  assertEqual(result.nextAction.doorSlot, result.nextDoorSlot, "typed frontier action should point at the rendered door")
+end
+
+local function testPlannerMarksExpiredHushDeadlineUnavailable()
+  local snapshot = baseSnapshot()
+  snapshot.run = { elapsedSeconds = 30 * 60 + 1 }
+  local result = Planner.plan(snapshot, { id = "boss.hush", kind = "boss", destinationRooms = { 3 } })
+  assertEqual(result.status, "unreachable", "expired Hush entrance should be unavailable")
+  assertEqual(result.nextAction.type, "ROUTE_UNAVAILABLE", "expired route should expose a typed unavailable action")
+  assertEqual(result.nextAction.deadline, 30 * 60, "typed unavailable action should expose the missed deadline")
+end
+
+local function testDeliriumMilestoneDoesNotPredictProbabilisticPortals()
+  local result = Milestones.compile({ id = "boss.delirium", kind = "boss" }, baseSnapshot())
+  local joined = table.concat(result.branches, "|")
+  assertTrue(string.find(joined, "probabilistic", 1, true) == nil, "Delirium guidance must not predict optional Void portals")
+  assertTrue(result.reasonCodes.observed_portal_required, "Delirium portal guidance should require observed state")
+end
+
 local function testMotherMilestoneReservesHealthAndQuestItems()
   local result = Milestones.compile({ id = "boss.mother", kind = "boss" }, baseSnapshot())
   assertEqual(result.requiredResources.health, 2, "Mother route should reserve Mausoleum entrance health")
   assertTrue(result.requiredItems.knife_piece_1 and result.requiredItems.knife_piece_2, "Mother route should expose both knife-piece milestones")
+  local hasPiece = baseSnapshot()
+  hasPiece.routeState = { questPieces = { knife_piece_1 = true }, consumedPieces = {} }
+  local partial = Milestones.compile({ id = "boss.mother", kind = "boss" }, hasPiece)
+  assertTrue(partial.requiredItems.knife_piece_1 == nil and partial.requiredItems.knife_piece_2, "observed knife pieces should satisfy only their own requirement")
 end
 
 local function testBeastMilestoneExposesPhotoAndAscentRequirements()
   local result = Milestones.compile({ id = "boss.beast", kind = "boss" }, baseSnapshot())
   assertTrue(result.requiredItems.photo and result.requiredItems.dad_note, "Beast route should expose photo and Dad's Note milestones")
   assertTrue(result.futureFloors[1] == "Depths II / Strange Door", "Beast route should provide a strategic future-floor milestone")
+  local ready = baseSnapshot()
+  ready.routeState = { questPieces = { photo = true }, routeCards = { fool = true }, photoChoice = "polaroid" }
+  local partial = Milestones.compile({ id = "boss.beast", kind = "boss" }, ready)
+  assertTrue(partial.requiredItems.photo == nil and partial.requiredItems.fool_or_teleport == nil, "observed photo and teleport card should satisfy Beast route requirements")
+end
+
+local function testMegaSatanMilestoneDistinguishesPiecesAndOpeners()
+  local opened = baseSnapshot()
+  opened.routeState = { questPieces = {}, consumedPieces = {}, alternateOpeners = { dads_key = true } }
+  local alternate = Milestones.compile({ id = "boss.mega_satan", kind = "boss" }, opened)
+  assertTrue(alternate.requiredItems.key_piece_1 == nil and alternate.requiredItems.key_piece_2 == nil, "observed alternate openers should satisfy Mega Satan access")
+  assertTrue(alternate.reasonCodes.alternate_opener_observed, "alternate opener should be explicit")
+  local consumed = baseSnapshot()
+  consumed.routeState = { questPieces = { key_piece_2 = true }, consumedPieces = { key_piece_1 = true }, alternateOpeners = {} }
+  local unavailable = Milestones.compile({ id = "boss.mega_satan", kind = "boss" }, consumed)
+  assertEqual(unavailable.status, "unreachable", "consumed Mega Satan key pieces should make the route unavailable")
+  assertTrue(unavailable.reasonCodes.key_piece_consumed, "consumed key piece should be explained")
+end
+
+local function testMilestonesEmitTypedStrategicActions()
+  local mother = Milestones.compile({ id = "boss.mother", kind = "boss" }, baseSnapshot())
+  assertEqual(mother.nextAction.type, "COLLECT_QUEST_ITEM", "missing Mother route pieces should request a quest-item collection")
+  assertEqual(mother.nextAction.targetId, "knife_piece_1", "Mother action should identify the next missing knife piece")
+  assertEqual(mother.nextAction.reserve.health, 2, "Mother action should preserve the flesh-door health reserve")
+
+  local lowHealth = baseSnapshot()
+  lowHealth.player.health = 1
+  local preserve = Milestones.compile({ id = "boss.mother", kind = "boss" }, lowHealth)
+  assertEqual(preserve.nextAction.type, "PRESERVE_RESOURCE", "insufficient reserved health should be a typed preservation action")
+  assertEqual(preserve.nextAction.cost.health, 2, "preservation action should expose the required health reserve")
+
+  local opened = baseSnapshot()
+  opened.routeState = { alternateOpeners = { dads_key = true } }
+  local megaSatan = Milestones.compile({ id = "boss.mega_satan", kind = "boss" }, opened)
+  assertEqual(megaSatan.nextAction.type, "USE_OPENER", "observed alternate Mega Satan openers should emit a typed opener action")
+  assertEqual(megaSatan.nextAction.targetId, "dads_key", "opener action should identify the observed opener")
+
+  local beast = baseSnapshot()
+  beast.routeState = { questPieces = { photo = true, dad_note = true }, routeCards = { fool = true }, photoChoice = "polaroid" }
+  local ascent = Milestones.compile({ id = "boss.beast", kind = "boss" }, beast)
+  assertEqual(ascent.nextAction.type, "RETURN_TO_ROOM", "completed Beast requirements should guide back through the observed route flow")
+  assertEqual(ascent.nextAction.targetId, "ascent", "Beast return action should name the ascent route target")
+end
+
+local function testPlannerPropagatesMilestoneActionWhenStrategicEntranceIsNotVisible()
+  local result = Planner.plan(baseSnapshot(), { id = "boss.mother", kind = "boss", destinationRooms = {} })
+  assertEqual(result.status, "explore", "missing observed strategic entrances should produce guidance instead of generic unavailability")
+  assertEqual(result.nextAction.type, "COLLECT_QUEST_ITEM", "planner should preserve milestone typed route actions")
+  assertEqual(result.nextAction.targetId, "knife_piece_1", "planner milestone action should identify the concrete missing requirement")
 end
 
 local function testMilestonesRejectWrongPhotoAndConsumedKnife()
@@ -625,7 +735,7 @@ local function testMilestonesRejectWrongPhotoAndConsumedKnife()
   assertEqual(wrongPhoto.status, "unreachable", "wrong Beast photo should redirect the run")
   assertTrue(wrongPhoto.reasonCodes.wrong_photo, "wrong photo should be explained")
   local mother = baseSnapshot()
-  mother.player.inventory = { knifeConsumed = true }
+  mother.routeState = { consumedPieces = { knife = true } }
   local consumed = Milestones.compile({ id = "boss.mother", kind = "boss" }, mother)
   assertEqual(consumed.status, "unreachable", "consumed knife route should be unreachable")
   assertTrue(consumed.reasonCodes.knife_consumed, "consumed knife should be explained")
@@ -1089,8 +1199,16 @@ local tests = {
   testGameAdapterEmitsContractSnapshotAliases,
   testRuntimeCanAssertFairPlayBoundary,
   testHushMilestoneDetectsMissedEntranceTimer,
+  testRouteStateIsObservedAndClassifiesSpecialDoors,
+  testPlannerEmitsTypedEnterDoorAction,
+  testPlannerEmitsTypedExploreFrontierAction,
+  testPlannerMarksExpiredHushDeadlineUnavailable,
+  testDeliriumMilestoneDoesNotPredictProbabilisticPortals,
   testMotherMilestoneReservesHealthAndQuestItems,
   testBeastMilestoneExposesPhotoAndAscentRequirements,
+  testMegaSatanMilestoneDistinguishesPiecesAndOpeners,
+  testMilestonesEmitTypedStrategicActions,
+  testPlannerPropagatesMilestoneActionWhenStrategicEntranceIsNotVisible,
   testMilestonesRejectWrongPhotoAndConsumedKnife,
   testSaveClampsUnsafeValues,
   testSaveMigratesSubOneHudScaleToTruthfulMinimum,

@@ -2,6 +2,7 @@ local GameAdapter = {}
 GameAdapter.__index = GameAdapter
 local Visibility = require("runcompass.visibility")
 local BuildState = require("runcompass.build_state")
+local RouteState = require("runcompass.route_state")
 
 local function safe(default, callback)
   if type(callback) ~= "function" then return default end
@@ -695,6 +696,7 @@ function GameAdapter:build()
     capabilities = caps,
     buildState = BuildState.fromPlayer(players[1] or {})
   }
+  snapshot.routeState = RouteState.fromSnapshot(snapshot)
   return Visibility.sanitizeSnapshot(snapshot)
 end
 

@@ -51,6 +51,13 @@ local function pathResources(path, roomMap, snapshot, goal, edges)
   return cost
 end
 
+local function edgeCost(edge)
+  local cost = Edges.cost(edge)
+  local result = {}
+  for resource, amount in pairs(cost or {}) do result[resource] = amount end
+  return result
+end
+
 local function canAfford(snapshot, goal, cost)
   if cost.unknown then return false end
   local available = snapshot.player or {}
@@ -181,6 +188,12 @@ local function recommendationForPath(snapshot, roomMap, candidate, goal)
   return {
     status = "ok",
     nextDoorSlot = firstDoor(snapshot, roomMap, candidate.nodes, goal, candidate.edges),
+    nextAction = {
+      type = "ENTER_DOOR",
+      doorSlot = firstDoor(snapshot, roomMap, candidate.nodes, goal, candidate.edges),
+      cost = edgeCost(candidate.edges and candidate.edges[1]),
+      reserve = goal.requiredResources or {}
+    },
     steps = steps,
     score = candidate.evaluation and candidate.evaluation.utility or candidate.score,
     scoreVector = candidate.evaluation,
@@ -214,7 +227,7 @@ function Planner.plan(snapshot, goal, previous, decisionModels)
 
   local milestone = Milestones.compile(goal, snapshot)
   if milestone.status == "unreachable" then
-    return { status = "unreachable", steps = { "This route requirement is no longer available this run" }, reasonCodes = milestone.reasonCodes, confidence = "high", capabilityTier = capabilityTier(snapshot) }
+    return { status = "unreachable", steps = { "This route requirement is no longer available this run" }, reasonCodes = milestone.reasonCodes, nextAction = milestone.nextAction or { type = "ROUTE_UNAVAILABLE" }, confidence = "high", capabilityTier = capabilityTier(snapshot) }
   end
   local routedGoal = {}
   for key, value in pairs(goal) do routedGoal[key] = value end
@@ -243,6 +256,7 @@ function Planner.plan(snapshot, goal, previous, decisionModels)
       local recommendation = {
         status = "explore",
         nextDoorSlot = candidate.doorSlot,
+        nextAction = { type = "EXPLORE_FRONTIER", doorSlot = candidate.doorSlot, reserve = goal.requiredResources or {} },
         steps = { step, "Replan when the target branch appears" },
         score = candidate.evaluation.utility,
         scoreVector = candidate.evaluation,
@@ -287,7 +301,20 @@ function Planner.plan(snapshot, goal, previous, decisionModels)
   if #paths == 0 then
     local reasonCodes = { hidden_information = hiddenDestination }
     if (goal.requiredResources and next(goal.requiredResources)) then reasonCodes.resource_reservation = true end
-    return { status = "unreachable", steps = {}, reasonCodes = reasonCodes, confidence = "low", capabilityTier = capabilityTier(snapshot) }
+    if milestone.nextAction and #destinations == 0 and not hiddenDestination then
+      local recommendation = {
+        status = "explore",
+        steps = { "Advance the next visible route requirement", "Replan when a strategic entrance appears" },
+        reasonCodes = reasonCodes,
+        nextAction = milestone.nextAction,
+        confidence = milestone.nextAction.confidence or "low",
+        capabilityTier = capabilityTier(snapshot)
+      }
+      recommendation = Recommendation.finalize(snapshot, goal, recommendation, milestone, decisionModels)
+      if keepPrevious(snapshot, previous, recommendation) then return previous end
+      return recommendation
+    end
+    return { status = "unreachable", steps = {}, reasonCodes = reasonCodes, nextAction = { type = "ROUTE_UNAVAILABLE" }, confidence = "low", capabilityTier = capabilityTier(snapshot) }
   end
 
   table.sort(paths, function(left, right)
