@@ -1,7 +1,7 @@
 local Rules = {}
 
-Rules.version = "1.3.0"
-Rules.source = "vanilla:repentance-plus-1.3"
+Rules.version = "1.5.0"
+Rules.source = "vanilla:repentance-plus-1.5"
 
 local function rule(id, family, fields)
   fields = fields or {}

@@ -2,8 +2,8 @@ local ItemModels = require("runcompass.item_models")
 local Profiles = require("runcompass.character_profiles")
 
 local VanillaModels = {}
-VanillaModels.version = "1.3.0"
-VanillaModels.source = "vanilla:repentance-plus-1.3"
+VanillaModels.version = "1.5.0"
+VanillaModels.source = "vanilla:repentance-plus-1.5"
 
 local function clone(value)
   if type(value) ~= "table" then return value end

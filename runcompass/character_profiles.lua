@@ -1,7 +1,7 @@
 local Profiles = {}
 
-Profiles.version = "1.3.0"
-Profiles.source = "vanilla:repentance-plus-1.3"
+Profiles.version = "1.5.0"
+Profiles.source = "vanilla:repentance-plus-1.5"
 
 local function clone(value)
   if type(value) ~= "table" then return value end

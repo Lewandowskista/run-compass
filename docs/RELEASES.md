@@ -1,5 +1,20 @@
 # Testing, packaging, and releases
 
+## 1.5.0 — Build Guidance and Hardening
+
+- Evaluates visible choices with actor-specific build state for Jacob and Esau style allocation.
+- Separates active transformations from numeric transformation progress.
+- Keeps character profiles as item-specific modifiers/constraints instead of constant candidate bonuses.
+- Publishes model diagnostics with live total, curated/baseline counts, confidence buckets, unsupported mechanics, source, and version.
+- Adds semantic marker states for TAKE, BUY, HOLD, SKIP, REROLL, REPLACE, INTERACT, CAUTION, and INSUFFICIENT INFORMATION.
+
+## 1.4.0 — Strategic Routing
+
+- Adds observed route state for stage, branch, quest pieces, photo/card state, alternate openers, timers, and visible special doors.
+- Emits typed route actions for door entry, frontier exploration, quest collection, resource preservation, opener use, return flow, and unavailable routes.
+- Removes probabilistic Void portal guidance and keeps Delirium advice tied to guaranteed/observed entrances.
+- Normalizes Mother, Beast, Hush, and Mega Satan milestone consumption through route state.
+
 ## 1.3.0 — Trustworthy Foundation
 
 - Normalizes observed health, door costs, visible-choice costs, and option alternatives conservatively.
