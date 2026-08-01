@@ -20,6 +20,18 @@ local REASON_PRIORITY = {
   "ranked_frontier"
 }
 
+local MARKER_STATES = {
+  take = "TAKE",
+  buy = "BUY",
+  hold = "HOLD",
+  skip = "SKIP",
+  reroll = "REROLL",
+  replace = "REPLACE",
+  replace_active = "REPLACE",
+  interact = "INTERACT",
+  insufficient_information = "INSUFFICIENT INFORMATION"
+}
+
 function Hud.strongestReason(reasonCodes)
   for _, reason in ipairs(REASON_PRIORITY) do
     if reasonCodes and reasonCodes[reason] then return reason end
@@ -39,6 +51,12 @@ function Hud.doorPosition(game, slot)
   local positioned, value = pcall(room.GetDoorSlotPosition, room, slot)
   if not positioned or not value then return nil end
   return { x = value.X or 0, y = value.Y or 0 }
+end
+
+function Hud.markerState(primary)
+  if not primary then return nil end
+  if primary.warnings and #primary.warnings > 0 then return "CAUTION" end
+  return MARKER_STATES[primary.action] or string.upper(tostring(primary.action or ""))
 end
 
 function Hud.view(recommendation, targetName, expanded, settings)
@@ -85,6 +103,7 @@ function Hud.view(recommendation, targetName, expanded, settings)
     action = primary and string.upper(primary.action or "") or nil,
     choiceName = primary and primary.name or nil,
     choicePosition = primary and primary.position or nil,
+    markerState = Hud.markerState(primary),
     confidence = confidenceValue,
     warnings = primary and primary.warnings or {},
     nextDoorSlot = recommendation.nextDoorSlot,

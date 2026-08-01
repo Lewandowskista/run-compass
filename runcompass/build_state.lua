@@ -36,6 +36,7 @@ function BuildState.fromPlayer(player)
     stats = clone(player.stats or { damage = player.damage or player.power or 0 }),
     health = health,
     resources = resources,
+    actors = clone(player.actors or {}),
     inventoryLimits = clone(player.inventoryLimits or {}),
     featureSummary = clone(player.featureSummary or {}),
     applicableRuleIds = clone(player.applicableRuleIds or {})

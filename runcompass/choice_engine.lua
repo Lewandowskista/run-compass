@@ -31,6 +31,18 @@ local function unavailableWarning(availability)
   return nil
 end
 
+local function actorBuildFor(build, actorToken, models)
+  local actorBuild = BuildState.clone(build)
+  local actorState = build and build.actors and build.actors[actorToken]
+  if type(actorState) == "table" then
+    for key, value in pairs(actorState) do actorBuild[key] = BuildState.clone(value) end
+    actorBuild.characterToken = actorBuild.characterToken or build.characterToken
+  end
+  actorBuild.actorToken = actorToken
+  actorBuild.featureSummary = models:featureSummary(actorBuild)
+  return actorBuild
+end
+
 local function better(left, right)
   local leftVector, rightVector = left.scoreVector, right.scoreVector
   local fields = { { "feasible", true }, { "survival", true }, { "resourceMargin", true }, { "goalUtility", true }, { "buildGain", true }, { "volatility", false }, { "detour", false } }
@@ -56,8 +68,7 @@ function ChoiceEngine.evaluate(snapshot, choices, goal, models, descriptions)
     local actors = choice.eligibleActors or { choice.actorToken or build.actorToken }
     if build.characterToken == "jacob_and_esau" and #actors == 1 and actors[1] == "primary" then actors = { "jacob", "esau" } end
     for _, actorToken in ipairs(actors) do
-      local actorBuild = BuildState.clone(build)
-      actorBuild.actorToken = actorToken
+      local actorBuild = actorBuildFor(build, actorToken, models)
       local model = models:evaluate(item.id, actorBuild, goal, choice.kind)
       local effects = model.effects or {}
       if choice.replacement and (action == "replace" or action == "replace_active") then
@@ -71,8 +82,6 @@ function ChoiceEngine.evaluate(snapshot, choices, goal, models, descriptions)
           model.warnings[#model.warnings + 1] = "charged_active_replaced"
         end
       end
-      local profile = models.characterProfiles and models.characterProfiles[build.characterToken]
-      if profile and profile.effects then effects = addEffects(effects, profile.effects) or effects; model.reasonCodes.character_profile = true end
       local identityHidden = (choice.kind == "collectible" or choice.kind == "trinket" or choice.kind == "card" or choice.kind == "pill") and item.id == nil
       local feasible = true
       local resourceWarnings = {}

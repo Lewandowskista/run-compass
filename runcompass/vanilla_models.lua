@@ -75,17 +75,33 @@ end
 VanillaModels.build = VanillaModels.fromCatalog
 
 function VanillaModels.diagnostics(items, models)
-  local report = { version = VanillaModels.version, source = VanillaModels.source, total = 0, modeled = 0, curated = 0, baseline = 0, dataUpdateRequired = 0, unknown = {} }
+  local report = {
+    version = VanillaModels.version,
+    source = VanillaModels.source,
+    total = 0,
+    modeled = 0,
+    curated = 0,
+    baseline = 0,
+    dataUpdateRequired = 0,
+    unknown = {},
+    confidence = {},
+    unsupportedMechanics = {}
+  }
+  local supportedKinds = { collectible = true, trinket = true, card = true, pill = true, pickup = true }
   for _, item in ipairs(items or {}) do
     report.total = report.total + 1
-    local model = models and models:get(item.id, item.kind or "collectible")
+    local kind = item.kind or "collectible"
+    local model = models and models:get(item.id, kind)
     if model then
       report.modeled = report.modeled + 1
       if model.status == "curated" then report.curated = report.curated + 1 else report.baseline = report.baseline + 1 end
       if model.status == "data_update_required" then report.dataUpdateRequired = report.dataUpdateRequired + 1 end
+      local confidence = model.confidence or "low"
+      report.confidence[confidence] = (report.confidence[confidence] or 0) + 1
     else
       report.unknown[#report.unknown + 1] = item.id
     end
+    if not supportedKinds[kind] then report.unsupportedMechanics[kind] = true end
   end
   return report
 end

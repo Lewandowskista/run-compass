@@ -131,7 +131,13 @@ function ItemModels:evaluate(id, build, goal, kind)
   end
   if model.transformation then
     local transformation = model.transformation
-    local current = build and build.transformations and (build.transformations[transformation.token] or 0) or 0
+    local current = build and build.transformations and build.transformations[transformation.token] or 0
+    if current == true then
+      result.reasonCodes.transformation_active = true
+      current = transformation.threshold or 0
+    elseif type(current) ~= "number" then
+      current = tonumber(current) or 0
+    end
     if current < transformation.threshold and current + (transformation.adds or 1) >= transformation.threshold then
       result.reasonCodes.transformation_threshold = true
       result.ruleIds[#result.ruleIds + 1] = transformation.id or ("transform:" .. tostring(transformation.token))

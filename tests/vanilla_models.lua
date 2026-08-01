@@ -67,12 +67,28 @@ local function testItemModelsNormalizeBaselineTagsWithoutFalseFamilies()
   assertTrue(not model.tags.beam, "ItemModels must not infer beam from technology")
 end
 
+local function testDiagnosticsExposeConfidenceAndUnsupportedMechanics()
+  local models = VanillaModels.fromCatalog({
+    { id = 68, name = "Technology", quality = 3, tags = 128 },
+    { id = 7000, kind = "machine", name = "Unknown Machine", quality = 0, tags = 0 }
+  })
+  assertEqual(models.diagnostics.total, 2, "diagnostics should expose live total")
+  assertEqual(models.diagnostics.curated, 1, "diagnostics should expose curated coverage")
+  assertEqual(models.diagnostics.baseline, 1, "diagnostics should expose baseline coverage")
+  assertEqual(models.diagnostics.confidence.high, 1, "diagnostics should bucket high-confidence models")
+  assertEqual(models.diagnostics.confidence.low, 1, "diagnostics should bucket low-confidence baselines")
+  assertTrue(models.diagnostics.unsupportedMechanics.machine, "diagnostics should list unsupported semantic mechanics")
+  assertEqual(models.diagnostics.source, VanillaModels.source, "diagnostics should expose model source")
+  assertEqual(models.diagnostics.version, VanillaModels.version, "diagnostics should expose model version")
+end
+
 local tests = {
   testEveryCatalogEntryGetsVersionedSourceTaggedModel,
   testItemConfigTagsNormalizeIntoFamilies,
   testSpecialCharacterProfilesExposeMechanics,
   testInteractionFamiliesAreIndexedAndConservative,
-  testItemModelsNormalizeBaselineTagsWithoutFalseFamilies
+  testItemModelsNormalizeBaselineTagsWithoutFalseFamilies,
+  testDiagnosticsExposeConfidenceAndUnsupportedMechanics
 }
 for index, test in ipairs(tests) do test(); print("vanilla ok " .. index) end
 print(#tests .. " vanilla model tests passed")

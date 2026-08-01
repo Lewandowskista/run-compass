@@ -341,16 +341,24 @@ function UI:render(snapshot, recommendation)
 
   if view.choicePosition then
     local screenX, screenY = toScreen(isaac, view.choicePosition.x, view.choicePosition.y)
-    local animation = view.action == "SKIP" and "Skip"
-      or view.action == "REROLL" and "Reroll"
-      or (view.warnings and #view.warnings > 0) and "Caution"
-      or "Take"
+    local animationByMarker = {
+      TAKE = "Take",
+      BUY = "Buy",
+      HOLD = "Hold",
+      SKIP = "Skip",
+      REROLL = "Reroll",
+      REPLACE = "Replace",
+      INTERACT = "Interact",
+      CAUTION = "Caution",
+      ["INSUFFICIENT INFORMATION"] = "InsufficientInformation"
+    }
+    local animation = animationByMarker[view.markerState] or "Take"
     if self.markerSprite then
       self.markerSprite:Play(animation, true)
       self.markerSprite.Scale = Vector(0.65 * scale, 0.65 * scale)
       self.markerSprite:Render(Vector(screenX, screenY - 24))
     else
-      renderText(isaac, view.action or "◆", screenX - 12, screenY - 24, 0.45 * scale, { 0.55, 0.9, 0.62, 1 })
+      renderText(isaac, view.markerState or view.action or "◆", screenX - 12, screenY - 24, 0.45 * scale, { 0.55, 0.9, 0.62, 1 })
     end
   end
 end

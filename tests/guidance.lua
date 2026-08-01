@@ -191,6 +191,34 @@ local function testAutoCompareGatesChoiceMarkerAndAction()
   assertEqual(disabled.action, nil, "action should be gated off when autoCompare is disabled")
 end
 
+local function testHudExposesSemanticMarkerStates()
+  local cases = {
+    { "take", "TAKE" },
+    { "buy", "BUY" },
+    { "hold", "HOLD" },
+    { "skip", "SKIP" },
+    { "reroll", "REROLL" },
+    { "replace", "REPLACE" },
+    { "replace_active", "REPLACE" },
+    { "interact", "INTERACT" },
+    { "insufficient_information", "INSUFFICIENT INFORMATION" }
+  }
+  for _, case in ipairs(cases) do
+    local view = Hud.view({
+      status = "ok",
+      steps = {},
+      decision = { primary = { action = case[1], position = { x = 1, y = 2 }, reasonCodes = {}, warnings = {} } }
+    }, "Goal", false, {})
+    assertEqual(view.markerState, case[2], "HUD should expose semantic marker state for " .. case[1])
+  end
+  local caution = Hud.view({
+    status = "ok",
+    steps = {},
+    decision = { primary = { action = "take", position = { x = 1, y = 2 }, reasonCodes = {}, warnings = { "risk" } } }
+  }, "Goal", false, {})
+  assertEqual(caution.markerState, "CAUTION", "warnings should elevate the marker to caution")
+end
+
 local function testNonActionableStatusRendersReadableText()
   local recommendation = { status = "unreachable", steps = {}, reasonCodes = {}, confidence = "low" }
   local view = Hud.view(recommendation, "Mega Satan", false, {})
@@ -302,6 +330,7 @@ local tests = {
   testCompactCardShowsConfidenceOnlyWhenEnabled,
   testCompactCardShowsWarningTextOnlyWhenEnabled,
   testAutoCompareGatesChoiceMarkerAndAction,
+  testHudExposesSemanticMarkerStates,
   testNonActionableStatusRendersReadableText,
   testDetailLevelScalesStepAndReasonLines,
   testEidDescriptionsSettingGatesDescriptionText,

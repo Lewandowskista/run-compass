@@ -103,11 +103,53 @@ local function testTransformationThresholdProducesReasonCode()
   assertTrue(result.reasonCodes.transformation_threshold, "crossing a transformation threshold should be explained")
 end
 
+local function testActiveTransformationBooleanIsNotComparedAsProgress()
+  local models = ItemModels.new({ [20] = { effects = { offense = 1 }, transformation = { token = "bookworm", adds = 1, threshold = 3 } } })
+  local ok, result = pcall(function()
+    return models:evaluate(20, { characterToken = "isaac", collectibles = {}, transformations = { bookworm = true } }, {})
+  end)
+  assertTrue(ok, "active transformation booleans must not be compared with numeric progress thresholds")
+  assertTrue(not result.reasonCodes.transformation_threshold, "already-active transformations should not be treated as numeric threshold progress")
+end
+
 local function testCharacterRestrictionProducesWarningInsteadOfFalseSynergy()
   local models = ItemModels.new({ [21] = { effects = { sustain = 3 }, requiresRedHealth = true } })
   local result = models:evaluate(21, { characterToken = "the_lost", collectibles = {} }, {})
   assertTrue(result.reasonCodes.character_restriction, "health-incompatible item should be explained")
   assertTrue(result.warnings[1] ~= nil, "health-incompatible item should warn")
+end
+
+local function testChoiceEngineUsesReceivingActorBuildForSynergy()
+  local models = ItemModels.new({
+    [100] = { effects = { offense = 1 }, tags = { tear = true } },
+    [200] = { effects = { offense = 1 }, synergies = { { owned = 100, effects = { bossDamage = 5 }, id = "actor_owned_pair" } } }
+  })
+  local result = ChoiceEngine.evaluate({
+    player = {
+      characterToken = "jacob_and_esau",
+      collectibles = {},
+      actors = {
+        jacob = { actorToken = "jacob", collectibles = { [100] = 1 } },
+        esau = { actorToken = "esau", collectibles = {} }
+      }
+    },
+    visibility = {}
+  }, {
+    { id = "shared", kind = "collectible", observedIdentity = { id = 200 }, eligibleActors = { "jacob", "esau" }, confidence = "high" }
+  }, {}, models)
+  assertEqual(result.primary.actorToken, "jacob", "assignment should be evaluated against the receiving actor's owned build")
+  assertTrue(result.primary.reasonCodes.owned_item_synergy, "actor-specific owned synergies should affect allocation")
+end
+
+local function testCharacterProfilesAreNotGlobalCandidateBonuses()
+  local models = ItemModels.new({ [200] = { effects = { offense = 1 } } })
+  models.characterProfiles.keeper = { effects = { economy = 20 } }
+  local result = ChoiceEngine.evaluate({ player = { characterToken = "keeper", collectibles = {} }, visibility = {} }, {
+    { id = "item", kind = "collectible", observedIdentity = { id = 200 }, confidence = "high" },
+    { id = "skip", kind = "skip", confidence = "high" }
+  }, {}, models)
+  assertTrue(not result.primary.reasonCodes.character_profile, "profile-level effects must not be added as a constant bonus to every candidate")
+  assertTrue(result.skip == nil or not result.skip.reasonCodes.character_profile, "safe alternatives must not receive unrelated character profile bonuses")
 end
 
 local function testGameAdapterCapturesOwnedItemsAndActives()
@@ -488,6 +530,6 @@ local function testSaveV3MigratesDecisionSettingsSafely()
   assertEqual(saved.browser.alphabet, "Z", "browser preferences should migrate")
 end
 
-local tests = { testBuildStateNormalizesOwnedInventory, testFeatureModelAppliesOwnedSynergy, testFeatureSummaryAggregatesOwnedBuild, testTagSynergyUsesIndexedBuildFeatures, testChoiceEngineRanksTakeOverSkipWhenGoalRelevant, testChoiceEngineRejectsUnaffordablePurchase, testChoiceEnginePreservesRouteReserveWhenRankingPurchases, testChoiceEngineTreatsUnknownCostAsInsufficientInformation, testChoiceEngineUsesLexicographicSafetyBeforeBuildGain, testChoiceEngineExplainsChargedActiveReplacementLoss, testCatalogBuildsBaselineModelsForEveryLiveItem, testCharacterModifierAndUnknownFallbackAreExplicit, testTransformationThresholdProducesReasonCode, testCharacterRestrictionProducesWarningInsteadOfFalseSynergy, testGameAdapterCapturesOwnedItemsAndActives, testGameAdapterCachesCollectibleScansBetweenFallbackFrames, testGameAdapterDoesNotCountBlackHeartBitmaskAsHealth, testGameAdapterNormalizesConservativeHealthModes, testGameAdapterNormalizesGoldenAndSmeltedTrinkets, testGameAdapterTreatsJacobAndEsauTwinAsSolo, testGameAdapterStillDetectsTrueCoop, testVisibleChoiceNormalizesObservedPickupAndPrice, testVisibleActiveChoiceExposesReplacementConsequence, testVisibleChoiceMapsPickupPriceConstantsToResourceCosts, testUnknownPickupPriceMakesAcquisitionInsufficientInformation, testVisibleChoiceAlternativesIncludeHoldForActiveReplacement, testSafeAlternativesDoNotInheritCandidateItemValue, testVisiblePillIdentityRequiresIdentificationProbe, testAdapterCatalogsTrinketsCardsAndPills, testAdapterCapturesVisibleMachineInteractions, testAdapterDescribesUnknownMachineVariantsConservatively, testAdapterExposesAvailableRerollDecision, testAdapterSuppressesRerollWithoutFullChargeOrTarget, testChoiceEngineDoesNotGuessBlindItemIdentity, testCompatibilityAPIRegistersModelsAndRules, testPlannerReturnsVisibleDecisionAlongsideRoute, testEIDIsOptionalDescriptionOnly, testSaveV3MigratesDecisionSettingsSafely }
+local tests = { testBuildStateNormalizesOwnedInventory, testFeatureModelAppliesOwnedSynergy, testFeatureSummaryAggregatesOwnedBuild, testTagSynergyUsesIndexedBuildFeatures, testChoiceEngineRanksTakeOverSkipWhenGoalRelevant, testChoiceEngineRejectsUnaffordablePurchase, testChoiceEnginePreservesRouteReserveWhenRankingPurchases, testChoiceEngineTreatsUnknownCostAsInsufficientInformation, testChoiceEngineUsesLexicographicSafetyBeforeBuildGain, testChoiceEngineExplainsChargedActiveReplacementLoss, testCatalogBuildsBaselineModelsForEveryLiveItem, testCharacterModifierAndUnknownFallbackAreExplicit, testTransformationThresholdProducesReasonCode, testActiveTransformationBooleanIsNotComparedAsProgress, testCharacterRestrictionProducesWarningInsteadOfFalseSynergy, testChoiceEngineUsesReceivingActorBuildForSynergy, testCharacterProfilesAreNotGlobalCandidateBonuses, testGameAdapterCapturesOwnedItemsAndActives, testGameAdapterCachesCollectibleScansBetweenFallbackFrames, testGameAdapterDoesNotCountBlackHeartBitmaskAsHealth, testGameAdapterNormalizesConservativeHealthModes, testGameAdapterNormalizesGoldenAndSmeltedTrinkets, testGameAdapterTreatsJacobAndEsauTwinAsSolo, testGameAdapterStillDetectsTrueCoop, testVisibleChoiceNormalizesObservedPickupAndPrice, testVisibleActiveChoiceExposesReplacementConsequence, testVisibleChoiceMapsPickupPriceConstantsToResourceCosts, testUnknownPickupPriceMakesAcquisitionInsufficientInformation, testVisibleChoiceAlternativesIncludeHoldForActiveReplacement, testSafeAlternativesDoNotInheritCandidateItemValue, testVisiblePillIdentityRequiresIdentificationProbe, testAdapterCatalogsTrinketsCardsAndPills, testAdapterCapturesVisibleMachineInteractions, testAdapterDescribesUnknownMachineVariantsConservatively, testAdapterExposesAvailableRerollDecision, testAdapterSuppressesRerollWithoutFullChargeOrTarget, testChoiceEngineDoesNotGuessBlindItemIdentity, testCompatibilityAPIRegistersModelsAndRules, testPlannerReturnsVisibleDecisionAlongsideRoute, testEIDIsOptionalDescriptionOnly, testSaveV3MigratesDecisionSettingsSafely }
 for index, test in ipairs(tests) do test(); print("build ok " .. index) end
 print(#tests .. " build-guide tests passed")
