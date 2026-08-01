@@ -126,6 +126,12 @@ local function testSaveMigrationUsesSafeDefaults()
   assertEqual(migrated.pinned, false, "missing fields should use safe defaults")
 end
 
+local function testFreshHudDefaultsAvoidLeftStatArea()
+  local migrated = Save.migrate(nil)
+  assertTrue(migrated.hud.x >= 120, "fresh HUD X offset should avoid overlapping vanilla and stat HUDs")
+  assertTrue(migrated.hud.y >= 24, "fresh HUD Y offset should avoid the top-left health/stat cluster")
+end
+
 local function testSaveRoundTripsLocalData()
   local encoded = Save.serialize({ schemaVersion = 1, selectedGoalId = "boss.delirium", pinned = true })
   local decoded = Save.deserialize(encoded)
@@ -1178,6 +1184,7 @@ local tests = {
   testCapabilityDetectionFallsBackSafely,
   testCapabilityDetectionProbesEnhancedFeaturesIndividually,
   testSaveMigrationUsesSafeDefaults,
+  testFreshHudDefaultsAvoidLeftStatArea,
   testSaveRoundTripsLocalData,
   testSaveV4AddsBrowserCategoryAndDetailBindings,
   testKeyboardBindingsAreRealKeycodes,

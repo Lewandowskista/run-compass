@@ -315,6 +315,13 @@ local function testVisibleChoiceNormalizesObservedPickupAndPrice()
   assertEqual(choice.action, "buy", "priced pickup should become an explicit buy action")
 end
 
+local function testVisibleChoiceSuppressesRawLocalizationTokenNames()
+  local adapter = GameAdapter.new({ pickupVariant = { PICKUP_COLLECTIBLE = 100 }, itemConfig = { GetCollectible = function() return { Name = "ICH_NAILS_NAME", Quality = 3, Tags = 8 } end } })
+  local choice = adapter:buildVisibleChoice({ Variant = 100, SubType = 359, InitSeed = 777, Position = { X = 40, Y = 50 } }, 9, { curseBlind = false })
+  assertEqual(choice.observedIdentity.id, 359, "observed identity should retain the real item id")
+  assertEqual(choice.observedIdentity.name, nil, "raw localization tokens must not leak into HUD item names")
+end
+
 local function testVisibleActiveChoiceExposesReplacementConsequence()
   local adapter = GameAdapter.new({ pickupVariant = { PICKUP_COLLECTIBLE = 100 }, activeItemType = 3, itemConfig = { GetCollectible = function() return { Name = "Active", Quality = 3, Type = 3 } end } })
   local choice = adapter:buildVisibleChoice({ Variant = 100, SubType = 200, Position = { X = 1, Y = 2 } }, 1, { curseBlind = false })
@@ -403,6 +410,17 @@ local function testAdapterDescribesUnknownMachineVariantsConservatively()
   local choices = adapter:buildInteractionChoices(5, { curseBlind = false })
   assertEqual(choices[1].observedIdentity.slotClass, "unknown", "unknown slot variants should not be folded into known machines")
   assertEqual(choices[1].availability, "unsupported", "unknown machines must not be recommended")
+end
+
+local function testAdapterSkipsMachineScanOutsideInteractionRooms()
+  local calls = 0
+  local adapter = GameAdapter.new({
+    entityType = { ENTITY_SLOT = 6 },
+    isaac = { FindByType = function() calls = calls + 1; return {} end }
+  })
+  local choices = adapter:buildInteractionChoices(5, { curseBlind = false }, "treasure")
+  assertEqual(#choices, 0, "non-interaction rooms should not expose machine choices")
+  assertEqual(calls, 0, "non-interaction rooms should not scan slot entities every refresh")
 end
 
 local function testAdapterExposesAvailableRerollDecision()
@@ -530,6 +548,6 @@ local function testSaveV3MigratesDecisionSettingsSafely()
   assertEqual(saved.browser.alphabet, "Z", "browser preferences should migrate")
 end
 
-local tests = { testBuildStateNormalizesOwnedInventory, testFeatureModelAppliesOwnedSynergy, testFeatureSummaryAggregatesOwnedBuild, testTagSynergyUsesIndexedBuildFeatures, testChoiceEngineRanksTakeOverSkipWhenGoalRelevant, testChoiceEngineRejectsUnaffordablePurchase, testChoiceEnginePreservesRouteReserveWhenRankingPurchases, testChoiceEngineTreatsUnknownCostAsInsufficientInformation, testChoiceEngineUsesLexicographicSafetyBeforeBuildGain, testChoiceEngineExplainsChargedActiveReplacementLoss, testCatalogBuildsBaselineModelsForEveryLiveItem, testCharacterModifierAndUnknownFallbackAreExplicit, testTransformationThresholdProducesReasonCode, testActiveTransformationBooleanIsNotComparedAsProgress, testCharacterRestrictionProducesWarningInsteadOfFalseSynergy, testChoiceEngineUsesReceivingActorBuildForSynergy, testCharacterProfilesAreNotGlobalCandidateBonuses, testGameAdapterCapturesOwnedItemsAndActives, testGameAdapterCachesCollectibleScansBetweenFallbackFrames, testGameAdapterDoesNotCountBlackHeartBitmaskAsHealth, testGameAdapterNormalizesConservativeHealthModes, testGameAdapterNormalizesGoldenAndSmeltedTrinkets, testGameAdapterTreatsJacobAndEsauTwinAsSolo, testGameAdapterStillDetectsTrueCoop, testVisibleChoiceNormalizesObservedPickupAndPrice, testVisibleActiveChoiceExposesReplacementConsequence, testVisibleChoiceMapsPickupPriceConstantsToResourceCosts, testUnknownPickupPriceMakesAcquisitionInsufficientInformation, testVisibleChoiceAlternativesIncludeHoldForActiveReplacement, testSafeAlternativesDoNotInheritCandidateItemValue, testVisiblePillIdentityRequiresIdentificationProbe, testAdapterCatalogsTrinketsCardsAndPills, testAdapterCapturesVisibleMachineInteractions, testAdapterDescribesUnknownMachineVariantsConservatively, testAdapterExposesAvailableRerollDecision, testAdapterSuppressesRerollWithoutFullChargeOrTarget, testChoiceEngineDoesNotGuessBlindItemIdentity, testCompatibilityAPIRegistersModelsAndRules, testPlannerReturnsVisibleDecisionAlongsideRoute, testEIDIsOptionalDescriptionOnly, testSaveV3MigratesDecisionSettingsSafely }
+local tests = { testBuildStateNormalizesOwnedInventory, testFeatureModelAppliesOwnedSynergy, testFeatureSummaryAggregatesOwnedBuild, testTagSynergyUsesIndexedBuildFeatures, testChoiceEngineRanksTakeOverSkipWhenGoalRelevant, testChoiceEngineRejectsUnaffordablePurchase, testChoiceEnginePreservesRouteReserveWhenRankingPurchases, testChoiceEngineTreatsUnknownCostAsInsufficientInformation, testChoiceEngineUsesLexicographicSafetyBeforeBuildGain, testChoiceEngineExplainsChargedActiveReplacementLoss, testCatalogBuildsBaselineModelsForEveryLiveItem, testCharacterModifierAndUnknownFallbackAreExplicit, testTransformationThresholdProducesReasonCode, testActiveTransformationBooleanIsNotComparedAsProgress, testCharacterRestrictionProducesWarningInsteadOfFalseSynergy, testChoiceEngineUsesReceivingActorBuildForSynergy, testCharacterProfilesAreNotGlobalCandidateBonuses, testGameAdapterCapturesOwnedItemsAndActives, testGameAdapterCachesCollectibleScansBetweenFallbackFrames, testGameAdapterDoesNotCountBlackHeartBitmaskAsHealth, testGameAdapterNormalizesConservativeHealthModes, testGameAdapterNormalizesGoldenAndSmeltedTrinkets, testGameAdapterTreatsJacobAndEsauTwinAsSolo, testGameAdapterStillDetectsTrueCoop, testVisibleChoiceNormalizesObservedPickupAndPrice, testVisibleChoiceSuppressesRawLocalizationTokenNames, testVisibleActiveChoiceExposesReplacementConsequence, testVisibleChoiceMapsPickupPriceConstantsToResourceCosts, testUnknownPickupPriceMakesAcquisitionInsufficientInformation, testVisibleChoiceAlternativesIncludeHoldForActiveReplacement, testSafeAlternativesDoNotInheritCandidateItemValue, testVisiblePillIdentityRequiresIdentificationProbe, testAdapterCatalogsTrinketsCardsAndPills, testAdapterCapturesVisibleMachineInteractions, testAdapterDescribesUnknownMachineVariantsConservatively, testAdapterSkipsMachineScanOutsideInteractionRooms, testAdapterExposesAvailableRerollDecision, testAdapterSuppressesRerollWithoutFullChargeOrTarget, testChoiceEngineDoesNotGuessBlindItemIdentity, testCompatibilityAPIRegistersModelsAndRules, testPlannerReturnsVisibleDecisionAlongsideRoute, testEIDIsOptionalDescriptionOnly, testSaveV3MigratesDecisionSettingsSafely }
 for index, test in ipairs(tests) do test(); print("build ok " .. index) end
 print(#tests .. " build-guide tests passed")

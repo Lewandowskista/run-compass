@@ -6,7 +6,7 @@ local function defaults()
     schemaVersion = CURRENT_SCHEMA,
     selectedGoalId = nil,
     pinned = false,
-    hud = { scale = 1, x = 0, y = 0, visible = true },
+    hud = { scale = 1, x = 140, y = 36, visible = true },
     diagnostics = false,
     decision = { autoCompare = true, detailLevel = 2, showConfidence = true, showWarnings = true, eidDescriptions = true },
     browser = {

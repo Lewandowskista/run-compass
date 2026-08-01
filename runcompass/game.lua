@@ -42,6 +42,12 @@ local function cloneTable(value)
   return result
 end
 
+local function readableConfigName(name)
+  if type(name) ~= "string" or name == "" then return nil end
+  if name:match("^[A-Z0-9_]+_NAME$") then return nil end
+  return name
+end
+
 local function constantMatches(constants, price, names)
   for _, name in ipairs(names) do
     if constants[name] ~= nil and tonumber(constants[name]) == price then return true end
@@ -97,7 +103,7 @@ function GameAdapter:collectItems(itemConfig)
   local max = collectibleType.NUM_COLLECTIBLES or 733
   for id = 1, max - 1 do
     local item = safe(nil, function() return itemConfig:GetCollectible(id) end)
-    if item then result[#result + 1] = { id = id, name = item.Name, achievementId = item.AchievementID, quality = item.Quality, tags = item.Tags } end
+    if item then result[#result + 1] = { id = id, name = readableConfigName(item.Name), achievementId = item.AchievementID, quality = item.Quality, tags = item.Tags } end
   end
   return result
 end
@@ -128,7 +134,7 @@ function GameAdapter:collectConfigured(kind, max)
   local result = {}
   for id = 0, (tonumber(max) or 0) - 1 do
     local item = safe(nil, function() return getter(itemConfig, id) end)
-    if item then result[#result + 1] = { id = id, kind = kind, name = item.Name, quality = item.Quality, tags = item.Tags } end
+    if item then result[#result + 1] = { id = id, kind = kind, name = readableConfigName(item.Name), quality = item.Quality, tags = item.Tags } end
   end
   return result
 end
@@ -309,15 +315,15 @@ function GameAdapter:buildVisibleChoice(pickup, roomId, visibility)
   if not visibility.curseBlind and kind == "collectible" then
     local item = self.env.itemConfig and safe(nil, function() return self.env.itemConfig:GetCollectible(pickup.SubType) end)
     itemConfigEntry = item
-    identity = { id = pickup.SubType, name = item and item.Name, quality = item and item.Quality, tags = item and item.Tags, itemType = item and item.Type }
+    identity = { id = pickup.SubType, name = readableConfigName(item and item.Name), quality = item and item.Quality, tags = item and item.Tags, itemType = item and item.Type }
   elseif not visibility.curseBlind and kind == "trinket" then
     local item = self.env.itemConfig and self.env.itemConfig.GetTrinket and safe(nil, function() return self.env.itemConfig:GetTrinket(pickup.SubType) end)
     itemConfigEntry = item
-    identity = { id = pickup.SubType, name = item and item.Name, quality = item and item.Quality, tags = item and item.Tags }
+    identity = { id = pickup.SubType, name = readableConfigName(item and item.Name), quality = item and item.Quality, tags = item and item.Tags }
   elseif not visibility.curseBlind and kind == "card" then
     local item = self.env.itemConfig and self.env.itemConfig.GetCard and safe(nil, function() return self.env.itemConfig:GetCard(pickup.SubType) end)
     itemConfigEntry = item
-    identity = { id = pickup.SubType, name = item and item.Name, quality = item and item.Quality, tags = item and item.Tags }
+    identity = { id = pickup.SubType, name = readableConfigName(item and item.Name), quality = item and item.Quality, tags = item and item.Tags }
   elseif not visibility.curseBlind and kind == "pill" then
     local itemPool = self.env.itemPool
     local identified = itemPool and type(itemPool.IsPillIdentified) == "function" and safe(false, function() return itemPool:IsPillIdentified(pickup.SubType) end)
@@ -398,7 +404,16 @@ function GameAdapter:buildVisibleChoiceAlternatives(pickup, roomId, visibility)
   return choices
 end
 
-function GameAdapter:buildInteractionChoices(roomId, visibility)
+local INTERACTION_ROOM_KINDS = {
+  arcade = true,
+  shop = true,
+  secret = true,
+  sacrifice = true,
+  curse = true
+}
+
+function GameAdapter:buildInteractionChoices(roomId, visibility, roomKind)
+  if roomKind ~= nil and not INTERACTION_ROOM_KINDS[roomKind] then return {} end
   local isaac = self.env.isaac or rawget(_G, "Isaac")
   local entityType = self.env.entityType or rawget(_G, "EntityType") or {}
   if not isaac or type(isaac.FindByType) ~= "function" or entityType.ENTITY_SLOT == nil then return {} end
@@ -603,6 +618,13 @@ function GameAdapter:build()
       if currentBossKind then room.kind = currentBossKind end
     end
   end
+  local currentRoomKind = "normal"
+  for _, room in ipairs(rooms) do
+    if room.id == currentIndex then
+      currentRoomKind = room.kind
+      break
+    end
+  end
   local pickups, pickupsByRoom, visibleChoices, choicesByRoom = {}, {}, {}, {}
   local isaac = env.isaac or rawget(_G, "Isaac")
   if isaac and isaac.FindByType then
@@ -632,7 +654,7 @@ function GameAdapter:build()
         choicesByRoom[roomId][#choicesByRoom[roomId] + 1] = visibleChoice
       end
     end
-    local interactions = self:buildInteractionChoices(currentIndex, visibility)
+    local interactions = self:buildInteractionChoices(currentIndex, visibility, currentRoomKind)
     for _, choice in ipairs(interactions) do
       visibleChoices[#visibleChoices + 1] = choice
       choicesByRoom[currentIndex] = choicesByRoom[currentIndex] or {}
