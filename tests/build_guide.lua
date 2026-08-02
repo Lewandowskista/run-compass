@@ -75,6 +75,14 @@ local function testChoiceEngineRanksTakeOverSkipWhenGoalRelevant()
   assertTrue(#result.alternatives <= 2, "comparison should expose at most two alternatives")
 end
 
+local function testChoiceEngineDoesNotGiveImperativeAdviceForBaselineModels()
+  local result = ChoiceEngine.evaluate({ player = { characterToken = "isaac", collectibles = {} }, visibility = {} }, {
+    { id = "baseline", kind = "collectible", observedIdentity = { id = 200, quality = 3 }, confidence = "high" }
+  }, {}, ItemModels.new({ [200] = { effects = { offense = 2 }, confidence = "low", status = "metadata_baseline" } }))
+  assertEqual(result.primary.action, "insufficient_information", "low-confidence baseline models must not issue TAKE/BUY/SKIP advice")
+  assertTrue(result.primary.reasonCodes.insufficient_information, "baseline abstention should explain the limited evidence")
+end
+
 local function testCatalogBuildsBaselineModelsForEveryLiveItem()
   local models = ItemModels.fromCatalog({
     { id = 1, quality = 0, tags = 1 },
@@ -163,13 +171,13 @@ local function testGameAdapterCapturesOwnedItemsAndActives()
     GetNumBombs = function() return 1 end,
     GetNumCoins = function() return 15 end,
     HasCollectible = function(_, id) return id == 100 end,
-    GetCollectibleNum = function(_, id) return id == 100 and 2 or 0 end,
+    GetCollectibleNum = function(_, id) return ({ [100] = 2, [101] = 1, [103] = 1, [105] = 1 })[id] or 0 end,
     GetActiveItem = function() return 300 end,
     GetActiveCharge = function() return 4 end,
     GetBatteryCharge = function() return 0 end,
     GetTrinket = function(_, slot) return slot == 0 and 10 or 0 end,
     GetTrinketMultiplier = function() return 1 end,
-    GetCard = function(_, slot) return slot == 0 and 5 or 0 end,
+    GetCard = function(_, slot) return ({ [0] = 5, [1] = 10 })[slot] or 0 end,
     GetPill = function() return 7 end,
     GetBoneHearts = function() return 1 end,
     GetRottenHearts = function() return 1 end,
@@ -178,7 +186,7 @@ local function testGameAdapterCapturesOwnedItemsAndActives()
     MaxFireDelay = 10,
     MoveSpeed = 1
   }
-  local adapter = GameAdapter.new({ playerType = { PLAYER_ISAAC = 1 }, playerForm = { PLAYERFORM_GUPPY = 10 }, itemPool = { IsPillIdentified = function() return true end, GetPillEffect = function() return "speed_up" end }, game = { GetNumPlayers = function() return 1 end, GetPlayer = function() return player end } })
+  local adapter = GameAdapter.new({ playerType = { PLAYER_ISAAC = 1 }, playerForm = { PLAYERFORM_GUPPY = 10 }, collectibleType = { COLLECTIBLE_KEY_PIECE_1 = 101, COLLECTIBLE_KEY_PIECE_2 = 102, COLLECTIBLE_KNIFE_PIECE_1 = 103, COLLECTIBLE_KNIFE_PIECE_2 = 104, COLLECTIBLE_DADS_NOTE = 105 }, cardType = { CARD_FOOL = 10 }, itemPool = { IsPillIdentified = function() return true end, GetPillEffect = function() return "speed_up" end }, game = { GetNumPlayers = function() return 1 end, GetPlayer = function() return player end } })
   local normalized = adapter:buildPlayer(player)
   assertEqual(normalized.collectibles[100], 2, "adapter should enumerate owned collectible counts")
   assertEqual(normalized.actives[1].id, 300, "adapter should capture active item identity")
@@ -187,6 +195,10 @@ local function testGameAdapterCapturesOwnedItemsAndActives()
   assertTrue(normalized.transformations.guppy, "active transformations should be detected")
   assertTrue(normalized.pills[1].identified, "identified pill state should be retained")
   assertEqual(normalized.pills[1].effect, "speed_up", "identified pill effect should be retained")
+  assertTrue(normalized.inventory.questItems.key_piece_1, "adapter should expose observed angel-key progress")
+  assertTrue(normalized.inventory.questItems.knife_piece_1, "adapter should expose observed Mother route progress")
+  assertTrue(normalized.inventory.questItems.dad_note, "adapter should expose observed Beast route progress")
+  assertTrue(normalized.inventory.routeCards.fool, "adapter should expose observed route cards")
 end
 
 local function testGameAdapterCachesCollectibleScansBetweenFallbackFrames()
@@ -551,6 +563,6 @@ local function testSaveV3MigratesDecisionSettingsSafely()
   assertEqual(saved.browser.alphabet, "Z", "browser preferences should migrate")
 end
 
-local tests = { testBuildStateNormalizesOwnedInventory, testFeatureModelAppliesOwnedSynergy, testFeatureSummaryAggregatesOwnedBuild, testTagSynergyUsesIndexedBuildFeatures, testChoiceEngineRanksTakeOverSkipWhenGoalRelevant, testChoiceEngineRejectsUnaffordablePurchase, testChoiceEnginePreservesRouteReserveWhenRankingPurchases, testChoiceEngineTreatsUnknownCostAsInsufficientInformation, testChoiceEngineUsesLexicographicSafetyBeforeBuildGain, testChoiceEngineExplainsChargedActiveReplacementLoss, testCatalogBuildsBaselineModelsForEveryLiveItem, testCharacterModifierAndUnknownFallbackAreExplicit, testTransformationThresholdProducesReasonCode, testActiveTransformationBooleanIsNotComparedAsProgress, testCharacterRestrictionProducesWarningInsteadOfFalseSynergy, testChoiceEngineUsesReceivingActorBuildForSynergy, testCharacterProfilesAreNotGlobalCandidateBonuses, testGameAdapterCapturesOwnedItemsAndActives, testGameAdapterCachesCollectibleScansBetweenFallbackFrames, testGameAdapterDoesNotCountBlackHeartBitmaskAsHealth, testGameAdapterNormalizesConservativeHealthModes, testGameAdapterNormalizesGoldenAndSmeltedTrinkets, testGameAdapterTreatsJacobAndEsauTwinAsSolo, testGameAdapterStillDetectsTrueCoop, testVisibleChoiceNormalizesObservedPickupAndPrice, testVisibleChoiceSuppressesRawLocalizationTokenNames, testVisibleActiveChoiceExposesReplacementConsequence, testVisibleChoiceMapsPickupPriceConstantsToResourceCosts, testUnknownPickupPriceMakesAcquisitionInsufficientInformation, testVisibleChoiceAlternativesIncludeHoldForActiveReplacement, testSafeAlternativesDoNotInheritCandidateItemValue, testVisiblePillIdentityRequiresIdentificationProbe, testAdapterCatalogsTrinketsCardsAndPills, testAdapterCapturesVisibleMachineInteractions, testAdapterDescribesUnknownMachineVariantsConservatively, testAdapterSkipsMachineScanOutsideInteractionRooms, testAdapterExposesAvailableRerollDecision, testAdapterSuppressesRerollWithoutFullChargeOrTarget, testChoiceEngineDoesNotGuessBlindItemIdentity, testCompatibilityAPIRegistersModelsAndRules, testPlannerReturnsVisibleDecisionAlongsideRoute, testEIDIsOptionalDescriptionOnly, testSaveV3MigratesDecisionSettingsSafely }
+local tests = { testBuildStateNormalizesOwnedInventory, testFeatureModelAppliesOwnedSynergy, testFeatureSummaryAggregatesOwnedBuild, testTagSynergyUsesIndexedBuildFeatures, testChoiceEngineRanksTakeOverSkipWhenGoalRelevant, testChoiceEngineDoesNotGiveImperativeAdviceForBaselineModels, testChoiceEngineRejectsUnaffordablePurchase, testChoiceEnginePreservesRouteReserveWhenRankingPurchases, testChoiceEngineTreatsUnknownCostAsInsufficientInformation, testChoiceEngineUsesLexicographicSafetyBeforeBuildGain, testChoiceEngineExplainsChargedActiveReplacementLoss, testCatalogBuildsBaselineModelsForEveryLiveItem, testCharacterModifierAndUnknownFallbackAreExplicit, testTransformationThresholdProducesReasonCode, testActiveTransformationBooleanIsNotComparedAsProgress, testCharacterRestrictionProducesWarningInsteadOfFalseSynergy, testChoiceEngineUsesReceivingActorBuildForSynergy, testCharacterProfilesAreNotGlobalCandidateBonuses, testGameAdapterCapturesOwnedItemsAndActives, testGameAdapterCachesCollectibleScansBetweenFallbackFrames, testGameAdapterDoesNotCountBlackHeartBitmaskAsHealth, testGameAdapterNormalizesConservativeHealthModes, testGameAdapterNormalizesGoldenAndSmeltedTrinkets, testGameAdapterTreatsJacobAndEsauTwinAsSolo, testGameAdapterStillDetectsTrueCoop, testVisibleChoiceNormalizesObservedPickupAndPrice, testVisibleChoiceSuppressesRawLocalizationTokenNames, testVisibleActiveChoiceExposesReplacementConsequence, testVisibleChoiceMapsPickupPriceConstantsToResourceCosts, testUnknownPickupPriceMakesAcquisitionInsufficientInformation, testVisibleChoiceAlternativesIncludeHoldForActiveReplacement, testSafeAlternativesDoNotInheritCandidateItemValue, testVisiblePillIdentityRequiresIdentificationProbe, testAdapterCatalogsTrinketsCardsAndPills, testAdapterCapturesVisibleMachineInteractions, testAdapterDescribesUnknownMachineVariantsConservatively, testAdapterSkipsMachineScanOutsideInteractionRooms, testAdapterExposesAvailableRerollDecision, testAdapterSuppressesRerollWithoutFullChargeOrTarget, testChoiceEngineDoesNotGuessBlindItemIdentity, testCompatibilityAPIRegistersModelsAndRules, testPlannerReturnsVisibleDecisionAlongsideRoute, testEIDIsOptionalDescriptionOnly, testSaveV3MigratesDecisionSettingsSafely }
 for index, test in ipairs(tests) do test(); print("build ok " .. index) end
 print(#tests .. " build-guide tests passed")

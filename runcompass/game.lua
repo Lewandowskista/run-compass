@@ -289,6 +289,10 @@ function GameAdapter:buildPlayer(player)
     maxRed = maxRed,
     mode = healthMode
   }
+  local routeInventory = RouteState.fromInventory(collectibles, cards, {
+    collectibleType = collectibleType,
+    cardType = self.env.cardType or rawget(_G, "Card") or {}
+  })
   return {
     health = healthState.effective, maxHealth = healthState.maxRed, healthState = healthState,
     keys = invoke(0, "GetNumKeys"), bombs = invoke(0, "GetNumBombs"), coins = invoke(0, "GetNumCoins"),
@@ -296,7 +300,11 @@ function GameAdapter:buildPlayer(player)
     stats = { damage = player.Damage or 0, fireRate = player.MaxFireDelay or 0, speed = player.MoveSpeed or 0 },
     resources = { keys = invoke(0, "GetNumKeys"), bombs = invoke(0, "GetNumBombs"), coins = invoke(0, "GetNumCoins") },
     collectibles = collectibles, actives = actives, trinkets = trinkets, cards = cards, pills = pills,
-    transformations = transformations, temporaryEffects = {}, inventory = { collectibles = collectibles, actives = actives, trinkets = trinkets, cards = cards, pills = pills }
+    transformations = transformations, temporaryEffects = {}, inventory = {
+      collectibles = collectibles, actives = actives, trinkets = trinkets, cards = cards, pills = pills,
+      questItems = routeInventory.questItems, routeCards = routeInventory.routeCards,
+      alternateOpeners = routeInventory.alternateOpeners
+    }
   }
 end
 

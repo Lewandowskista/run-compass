@@ -65,7 +65,6 @@ function VanillaModels.fromCatalog(items)
     if model then
       model.source = model.source or VanillaModels.source
       model.sourceVersion = model.sourceVersion or VanillaModels.version
-      if model.status ~= "curated" then model.status = "data_update_required" end
     end
   end
   models.diagnostics = VanillaModels.diagnostics(entries, models)

@@ -7,7 +7,7 @@
 [![Tests](https://img.shields.io/badge/tests-fengari%20fixtures-8be04e?style=flat-square&labelColor=101b33)](https://github.com/Lewandowskista/run-compass/blob/main/docs/RELEASES.md)
 [![Fair play](https://img.shields.io/badge/fair--play-visible%20information-8be04e?style=flat-square&labelColor=101b33)](https://github.com/Lewandowskista/run-compass/blob/main/docs/FAIR_PLAY.md)
 
-Run Compass is an Observatory for **The Binding of Isaac: Repentance+**: a fair-play route and build guide for solo Normal and Hard runs. Pick a boss or vanilla unlock, then get a compact next-door and visible-choice recommendation as the floor reveals itself. It is a decision aid, not an oracle—there is no guaranteed optimal play.
+Run Compass is an Observatory for **The Binding of Isaac: Repentance+**: a fair-play route and build guide for solo Normal and Hard runs. Pick a supported boss route or validated vanilla unlock, then get a compact next-door and visible-choice recommendation as the floor reveals itself. It is a decision aid, not an oracle—there is no guaranteed optimal play.
 
 [Install](https://github.com/Lewandowskista/run-compass/blob/main/docs/INSTALLATION.md) · [Controls](https://github.com/Lewandowskista/run-compass/blob/main/docs/CONTROLS.md) · [Fair-play method](https://github.com/Lewandowskista/run-compass/blob/main/docs/FAIR_PLAY.md) · [Compatibility API](https://github.com/Lewandowskista/run-compass/blob/main/docs/COMPATIBILITY.md) · [Releases](https://github.com/Lewandowskista/run-compass/blob/main/docs/RELEASES.md)
 
@@ -15,10 +15,10 @@ Run Compass is an Observatory for **The Binding of Isaac: Repentance+**: a fair-
 
 | Route lens | Choice lens |
 | --- | --- |
-| Replans over revealed rooms toward Delirium, Mother, The Beast, Mega Satan, Hush, and other supported goals. | Compares take, buy, replace, reroll, interact, hold, or skip for visible pedestals, shops, machines, beggars, sacrifices, and pickups. |
+| Replans over revealed rooms toward Delirium, Mother, The Beast, Mega Satan, Hush, and other supported goals. | Compares visible choices only when their identity, cost, and model confidence support an actionable comparison. |
 | Keeps timers and reserved resources in view while choosing a bounded path. | Explains goal utility, survival, synergies, anti-synergies, transformations, replacement loss, volatility, and confidence. |
 
-**Fair-play filter.** Secret rooms, unseen rewards, Blind identities, Lost topology, future pools, and RNG outcomes are never inferred. Unknown or future content is labeled `data_update_required` or `Repentogon required` and falls back conservatively.
+**Fair-play filter.** Secret rooms, unseen rewards, Blind identities, Lost topology, future pools, and RNG outcomes are never inferred. Unknown or version-mismatched content is labeled `data_update_required`; known baseline content is shown with limited confidence and never receives a TAKE/BUY/SKIP directive.
 
 **Dynamic replanning.** Room transitions, pickups, damage, purchases, inventory changes, resources, rerolls, actor/form changes, and branch choices invalidate the previous recommendation. Rendering only presents the latest plan; it never mutates game state.
 
@@ -83,4 +83,4 @@ The fixture, performance, and build-guide suites are described in the [release g
 
 ## Scope
 
-Version 1.5 targets solo Normal/Hard routing and visible build decisions for every regular and tainted vanilla character. Greed, challenges, Victory Laps, co-op, and progression-disabled custom runs are marked inactive. Run Compass never changes rooms, pickups, seeds, achievements, or player state.
+Version 1.5 targets solo Normal/Hard routing for supported boss goals and the validated unlock catalog, with visible build comparisons where confidence permits. Every regular and tainted vanilla character is recognized; specialized mechanics outside the verified model remain informational. Greed, challenges, Victory Laps, co-op, and progression-disabled custom runs are marked inactive. Run Compass never changes rooms, pickups, seeds, achievements, or player state.

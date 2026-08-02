@@ -41,7 +41,7 @@ npm.cmd ci
 npm.cmd test
 ```
 
-`npm.cmd test` executes `tests/run.lua`, `tests/performance.lua`, and `tests/build_guide.lua` through Fengari. Keep the planner deterministic and side-effect free; tests should not require a running game client.
+`npm.cmd test` executes planner, performance, build-guide, vanilla-model, diagnostics, navigation UI, and guidance fixtures through Fengari. Keep the planner deterministic and side-effect free; tests should not require a running game client.
 
 ## Package validation
 

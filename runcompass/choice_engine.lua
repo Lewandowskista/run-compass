@@ -95,6 +95,12 @@ function ChoiceEngine.evaluate(snapshot, choices, goal, models, descriptions)
         model.reasonCodes.insufficient_information = true
         action = "insufficient_information"
       end
+      if model.status == "metadata_baseline" and model.confidence == "low" then
+        feasible = false
+        table.insert(resourceWarnings, "limited_item_data")
+        model.reasonCodes.insufficient_information = true
+        action = "insufficient_information"
+      end
       for resource, amount in pairs(costs) do
         if resource ~= "activeCharge" and (available[resource] or 0) < (tonumber(amount) or 0) then
           feasible = false

@@ -15,6 +15,42 @@ local function currentRoom(snapshot)
   return nil
 end
 
+function RouteState.fromInventory(collectibles, cards, env)
+  collectibles, cards, env = collectibles or {}, cards or {}, env or {}
+  local collectibleType = env.collectibleType or rawget(_G, "CollectibleType") or {}
+  local cardType = env.cardType or rawget(_G, "Card") or {}
+  local function held(id) return id ~= nil and (collectibles[id] or 0) > 0 end
+  local cardSet = {}
+  for _, card in ipairs(cards) do cardSet[card.id] = true end
+  local function hasCard(id) return id ~= nil and cardSet[id] == true end
+
+  local questItems = {
+    key_piece_1 = held(collectibleType.COLLECTIBLE_KEY_PIECE_1),
+    key_piece_2 = held(collectibleType.COLLECTIBLE_KEY_PIECE_2),
+    knife_piece_1 = held(collectibleType.COLLECTIBLE_KNIFE_PIECE_1),
+    knife_piece_2 = held(collectibleType.COLLECTIBLE_KNIFE_PIECE_2),
+    polaroid = held(collectibleType.COLLECTIBLE_POLAROID),
+    negative = held(collectibleType.COLLECTIBLE_NEGATIVE),
+    moms_shovel = held(collectibleType.COLLECTIBLE_MOMS_SHOVEL),
+    dad_note = held(collectibleType.COLLECTIBLE_DADS_NOTE),
+    photo = held(collectibleType.COLLECTIBLE_DADS_NOTE_PHOTO or collectibleType.COLLECTIBLE_POLAROID_PHOTO)
+  }
+  local routeCards = {
+    fool = hasCard(cardType.CARD_FOOL),
+    teleport = hasCard(cardType.CARD_TELEPORT),
+    emperor = hasCard(cardType.CARD_EMPEROR),
+    moon = hasCard(cardType.CARD_MOON)
+  }
+  return {
+    questItems = questItems,
+    routeCards = routeCards,
+    alternateOpeners = {
+      dads_key = held(collectibleType.COLLECTIBLE_DADS_KEY),
+      moms_shovel = questItems.moms_shovel
+    }
+  }
+end
+
 function RouteState.fromSnapshot(snapshot)
   snapshot = snapshot or {}
   local floor = snapshot.floor or {}

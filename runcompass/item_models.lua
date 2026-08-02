@@ -77,7 +77,8 @@ end
 
 function ItemModels:evaluate(id, build, goal, kind)
   local model = self:get(id, kind) or { effects = {}, tags = {}, status = "data_update_required" }
-  local result = { effects = clone(model.effects or {}), tags = clone(model.tags or {}), reasonCodes = {}, ruleIds = {}, confidence = model.status == "data_update_required" and "low" or "medium", warnings = {} }
+  local confidence = model.confidence or (model.status == "data_update_required" and "low" or "medium")
+  local result = { effects = clone(model.effects or {}), tags = clone(model.tags or {}), reasonCodes = {}, ruleIds = {}, confidence = confidence, status = model.status, warnings = {} }
   if model.status == "data_update_required" then result.warnings[#result.warnings + 1] = "data_update_required" end
   for _, rule in ipairs(model.synergies or {}) do
     local owned = build and build.collectibles and build.collectibles[rule.owned]

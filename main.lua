@@ -15,6 +15,7 @@ local Runtime = require("runcompass.runtime")
 local VanillaModels = require("runcompass.vanilla_models")
 local InteractionRules = require("runcompass.interaction_rules")
 local CharacterProfiles = require("runcompass.character_profiles")
+local Diagnostics = require("runcompass.diagnostics")
 local GuideAPI = require("runcompass.guide_api")
 local EID = require("runcompass.eid")
 
@@ -191,10 +192,10 @@ addCallback("MC_EXECUTE_CMD", function(command, params)
   if command ~= "runcompass" then return end
   local argument = string.lower(params or "")
   if catalog and catalog:get(argument) then state.selectedGoalId = argument; controller:onEvent("TARGET_CHANGED"); output("Target set to " .. argument)
-  elseif argument == "status" then output("tier=" .. capabilities.tier .. ", target=" .. tostring(state.selectedGoalId))
+  elseif argument == "status" then
+    output(Diagnostics.formatStatus(Diagnostics.status(capabilities, decisionModels and decisionModels.diagnostics, state.selectedGoalId)))
   elseif argument == "catalog" and catalog then
-    local report = catalog:validate(Rules)
-    output("catalog=" .. tostring(Rules.version) .. ", total=" .. tostring(report.total) .. ", classified=" .. tostring(report.classified) .. ", unknown=" .. tostring(report.unmapped) .. ", invalid=" .. tostring(#report.invalid))
+    output(Diagnostics.formatCatalog(Diagnostics.catalog(catalog:validate(Rules), decisionModels and decisionModels.diagnostics, InteractionRules.diagnostics())))
   else output("Usage: runcompass status | runcompass catalog | runcompass <goal-id>") end
 end)
 

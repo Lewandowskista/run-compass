@@ -2,7 +2,7 @@
 <metadata>
     <name>Run Compass [REP+]</name>
     <directory>run-compass</directory>
-    <description>Fair-play dynamic route and build guidance for every vanilla character in solo Normal and Hard Repentance+ runs. Compare visible collectibles, actives, trinkets, cards, pills, shops, rerolls, machines, and resource timing against your selected goal. Mod Config Menu is recommended for settings; base routing uses safe defaults without it. Repentogon and EID are optional enhancements.</description>
+    <description>Fair-play dynamic route guidance for supported boss goals and validated vanilla unlocks in solo Normal and Hard Repentance+ runs. Compare visible choices only when their identity, cost, and model confidence support actionable advice; otherwise Run Compass labels the limit. Mod Config Menu is recommended for settings; Repentogon and EID are optional enhancements.</description>
     <version>1.5.0</version>
     <visibility>Public</visibility>
     <tag id="Lua"/>
